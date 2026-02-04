@@ -3,8 +3,9 @@ parameters:
   end_date: '2026-02-03'
   period: D
   currency: EUR
-output:
-  path: /mnt/srvPergam_docs/Quant/Data/ATLAS_data_static.xlsx
+paths:
+  source_xlsx: X:\Quant\Data\ATLAS_data.xlsx
+  output_xlsx: X:\Quant\Data\ATLAS_data_static.xlsx
 bloomberg:
   batch_size: 250
   ticker_suffix: ' Equity'

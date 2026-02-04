@@ -12,6 +12,7 @@ Usage:
 """
 
 import argparse
+import datetime as dt
 import logging
 import os
 import sys
@@ -30,10 +31,18 @@ logger = logging.getLogger(__name__)
 
 
 class ATLASBloombergLoader:
-    def __init__(self, config_path: str, end_date_override: str | None = None, dry_run: bool = False):
+    def __init__(
+        self,
+        config_path: str,
+        start_date_override: str | None = None,
+        end_date_override: str | None = None,
+        dry_run: bool = False,
+    ):
         self.dry_run = dry_run
         self.config = self._load_config(config_path)
 
+        if start_date_override:
+            self.config["parameters"]["start_date"] = start_date_override
         if end_date_override:
             self.config["parameters"]["end_date"] = end_date_override
 
@@ -43,7 +52,7 @@ class ATLASBloombergLoader:
         self.ticker_suffix = self.config["bloomberg"]["ticker_suffix"]
         self.fields = self.config["fields"]  # e.g. {"price": "PX_LAST", ...}
         self.tickers = self.config["tickers"]  # raw tickers without suffix
-        self.output_path = self.config["output"]["path"]
+        self.output_path = self.config["paths"]["output_xlsx"]
 
     # ------------------------------------------------------------------
     # Config
@@ -55,7 +64,7 @@ class ATLASBloombergLoader:
         with open(path) as f:
             cfg = yaml.safe_load(f)
         # Validate required keys
-        for key in ("parameters", "output", "bloomberg", "fields", "tickers"):
+        for key in ("parameters", "paths", "bloomberg", "fields", "tickers"):
             if key not in cfg:
                 raise KeyError(f"Missing required config key: {key}")
         if not cfg["tickers"]:
@@ -229,9 +238,19 @@ def main():
         help="Path to YAML config (default: config/atlas_config.yaml)",
     )
     parser.add_argument(
+        "--start-date",
+        default=None,
+        help="Override start date (e.g. 2013-01-01)",
+    )
+    parser.add_argument(
         "--end-date",
         default=None,
         help="Override end date (e.g. 2026-02-04)",
+    )
+    parser.add_argument(
+        "--today",
+        action="store_true",
+        help="Set end date to today",
     )
     parser.add_argument(
         "--dry-run",
@@ -248,9 +267,14 @@ def main():
 
     logger.setLevel(getattr(logging, args.log_level))
 
+    end_date = args.end_date
+    if args.today:
+        end_date = dt.date.today().isoformat()
+
     loader = ATLASBloombergLoader(
         config_path=args.config,
-        end_date_override=args.end_date,
+        start_date_override=args.start_date,
+        end_date_override=end_date,
         dry_run=args.dry_run,
     )
     loader.run()

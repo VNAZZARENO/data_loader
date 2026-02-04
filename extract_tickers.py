@@ -67,8 +67,9 @@ def extract_config(
             "period": period,
             "currency": currency,
         },
-        "output": {
-            "path": output_xlsx,
+        "paths": {
+            "source_xlsx": xlsx_path,
+            "output_xlsx": output_xlsx,
         },
         "bloomberg": {
             "batch_size": 250,
@@ -89,7 +90,7 @@ def main():
     parser = argparse.ArgumentParser(description="Extract tickers from ATLAS_data.xlsx into YAML config")
     parser.add_argument(
         "--xlsx",
-        default="/mnt/srvPergam_docs/Quant/Data/ATLAS_data.xlsx",
+        default=r"X:\Quant\Data\ATLAS_data.xlsx",
         help="Path to source ATLAS_data.xlsx",
     )
     parser.add_argument(
