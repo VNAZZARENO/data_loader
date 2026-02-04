@@ -2,16 +2,19 @@
 """
 ATLAS Bloomberg Data Loader
 
-Reads a YAML config (ticker universe + field mappings) and uses xbbg to pull
-BDH data from Bloomberg, writing a clean static xlsx.
+Reads a YAML config (field mappings + universe list) and per-universe ticker
+CSV files from tickers/, then uses xbbg to pull BDH data from Bloomberg,
+writing a clean static xlsx per universe.
 
 Usage:
     source .venv/bin/activate && python3 bloomberg_loader.py
     source .venv/bin/activate && python3 bloomberg_loader.py --dry-run
-    source .venv/bin/activate && python3 bloomberg_loader.py --end-date 2026-02-04
+    source .venv/bin/activate && python3 bloomberg_loader.py --universe nky --dry-run
+    source .venv/bin/activate && python3 bloomberg_loader.py --universe spx --today
 """
 
 import argparse
+import csv
 import datetime as dt
 import logging
 import os
@@ -37,9 +40,19 @@ class ATLASBloombergLoader:
         start_date_override: str | None = None,
         end_date_override: str | None = None,
         dry_run: bool = False,
+        universe: str | None = None,
     ):
         self.dry_run = dry_run
         self.config = self._load_config(config_path)
+
+        # Resolve universe: CLI override -> config default -> "sxxr"
+        available = self.config["universes"]["available"]
+        self.universe = universe or self.config["universes"].get("default", "sxxr")
+        if self.universe not in available:
+            raise ValueError(
+                f"Unknown universe '{self.universe}'. "
+                f"Available: {', '.join(available)}"
+            )
 
         if start_date_override:
             self.config["parameters"]["start_date"] = start_date_override
@@ -51,8 +64,10 @@ class ATLASBloombergLoader:
         self.batch_size = self.config["bloomberg"]["batch_size"]
         self.ticker_suffix = self.config["bloomberg"]["ticker_suffix"]
         self.fields = self.config["fields"]  # e.g. {"price": "PX_LAST", ...}
-        self.tickers = self.config["tickers"]  # raw tickers without suffix
-        self.output_path = self.config["paths"]["output_xlsx"]
+        self.tickers = self._load_tickers(self.universe)
+        self.output_path = self.config["paths"]["output_xlsx"].format(
+            universe=self.universe
+        )
 
     # ------------------------------------------------------------------
     # Config
@@ -64,12 +79,26 @@ class ATLASBloombergLoader:
         with open(path) as f:
             cfg = yaml.safe_load(f)
         # Validate required keys
-        for key in ("parameters", "paths", "bloomberg", "fields", "tickers"):
+        for key in ("parameters", "paths", "bloomberg", "fields", "universes"):
             if key not in cfg:
                 raise KeyError(f"Missing required config key: {key}")
-        if not cfg["tickers"]:
-            raise ValueError("Ticker list is empty — run extract_tickers.py first")
         return cfg
+
+    @staticmethod
+    def _load_tickers(universe: str) -> list[str]:
+        """Load ticker list from tickers/<universe>.csv."""
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        ticker_file = os.path.join(project_root, "tickers", f"{universe}.csv")
+        if not os.path.isfile(ticker_file):
+            raise FileNotFoundError(f"Ticker file not found: {ticker_file}")
+        with open(ticker_file, encoding="utf-8-sig", newline="") as f:
+            reader = csv.DictReader(f)
+            if "Ticker" not in (reader.fieldnames or []):
+                raise ValueError(f"Ticker file missing 'Ticker' column: {ticker_file}")
+            tickers = [row["Ticker"].strip() for row in reader if row["Ticker"].strip()]
+        if not tickers:
+            raise ValueError(f"Ticker file is empty: {ticker_file}")
+        return tickers
 
     # ------------------------------------------------------------------
     # Bloomberg extraction (3-tier error handling)
@@ -190,7 +219,10 @@ class ATLASBloombergLoader:
     # Main run
     # ------------------------------------------------------------------
     def run(self) -> None:
-        logger.info(f"ATLAS Bloomberg Loader — {len(self.tickers)} tickers, {len(self.fields)} fields")
+        logger.info(
+            f"ATLAS Bloomberg Loader — universe={self.universe}, "
+            f"{len(self.tickers)} tickers, {len(self.fields)} fields"
+        )
         logger.info(f"Date range: {self.start_date} -> {self.end_date}")
         logger.info(f"Batch size: {self.batch_size}")
         logger.info(f"Output: {self.output_path}")
@@ -253,6 +285,11 @@ def main():
         help="Set end date to today",
     )
     parser.add_argument(
+        "--universe",
+        default=None,
+        help="Ticker universe (sxxr, nky, spx, pbh, sx5e, splpeqty). Default: sxxr",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Validate config and print plan without making API calls",
@@ -276,6 +313,7 @@ def main():
         start_date_override=args.start_date,
         end_date_override=end_date,
         dry_run=args.dry_run,
+        universe=args.universe,
     )
     loader.run()
 

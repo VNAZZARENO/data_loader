@@ -2,6 +2,10 @@
 """
 Bootstrap utility: reads ATLAS_data.xlsx and writes ticker universe + parameters
 into config/atlas_config.yaml for use by bloomberg_loader.py.
+
+DEPRECATED: Tickers are now loaded from per-universe CSV files in tickers/.
+This script is kept for reference but is no longer needed for normal operation.
+See bloomberg_loader.py --universe for the current workflow.
 """
 
 import argparse
