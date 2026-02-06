@@ -69,6 +69,10 @@ class ATLASBloombergLoader:
             universe=self.universe
         )
 
+        # Benchmark (optional, per-universe)
+        benchmarks = self.config.get("benchmarks", {})
+        self.benchmark = benchmarks.get(self.universe)
+
     # ------------------------------------------------------------------
     # Config
     # ------------------------------------------------------------------
@@ -188,9 +192,52 @@ class ATLASBloombergLoader:
         return combined
 
     # ------------------------------------------------------------------
+    # Benchmark extraction
+    # ------------------------------------------------------------------
+    def _extract_benchmark(self) -> pd.DataFrame:
+        """Pull all fields for the benchmark ticker.
+
+        Returns a DataFrame with DatetimeIndex and one column per field
+        (using the sheet name as column name).
+        """
+        if not self.benchmark:
+            return pd.DataFrame()
+
+        if self.dry_run:
+            logger.info(
+                f"[DRY RUN] Would extract benchmark {self.benchmark} "
+                f"({self.start_date} -> {self.end_date})"
+            )
+            return pd.DataFrame()
+
+        series: dict[str, pd.Series] = {}
+        for sheet_name, bbg_field in self.fields.items():
+            logger.info(f"  Benchmark {self.benchmark} — {bbg_field}")
+            try:
+                df = blp.bdh(
+                    tickers=[self.benchmark],
+                    flds=[bbg_field],
+                    start_date=self.start_date,
+                    end_date=self.end_date,
+                )
+                if not df.empty:
+                    # Flatten MultiIndex columns and take the single series
+                    if isinstance(df.columns, pd.MultiIndex):
+                        df = df.droplevel(0, axis=1)
+                    series[sheet_name] = df.iloc[:, 0]
+                else:
+                    logger.warning(f"  No benchmark data for {bbg_field}")
+            except Exception as e:
+                logger.warning(f"  Benchmark failed for {bbg_field}: {e}")
+
+        if series:
+            return pd.DataFrame(series)
+        return pd.DataFrame()
+
+    # ------------------------------------------------------------------
     # Excel output
     # ------------------------------------------------------------------
-    def _write_xlsx(self, results: dict[str, pd.DataFrame]) -> None:
+    def _write_xlsx(self, results: dict[str, pd.DataFrame], benchmark: pd.DataFrame | None = None) -> None:
         """Write all results to a multi-sheet xlsx file."""
         logger.info(f"Writing output to {self.output_path}")
 
@@ -213,6 +260,15 @@ class ATLASBloombergLoader:
                 df.to_excel(writer, sheet_name=sheet_name)
                 logger.info(f"  Sheet '{sheet_name}': {df.shape[0]} rows x {df.shape[1]} cols")
 
+            # benchmark sheet
+            if benchmark is not None and not benchmark.empty:
+                benchmark.index.name = "Date"
+                benchmark.to_excel(writer, sheet_name="benchmark")
+                logger.info(
+                    f"  Sheet 'benchmark' ({self.benchmark}): "
+                    f"{benchmark.shape[0]} rows x {benchmark.shape[1]} cols"
+                )
+
         logger.info(f"Output written: {self.output_path}")
 
     # ------------------------------------------------------------------
@@ -225,6 +281,8 @@ class ATLASBloombergLoader:
         )
         logger.info(f"Date range: {self.start_date} -> {self.end_date}")
         logger.info(f"Batch size: {self.batch_size}")
+        if self.benchmark:
+            logger.info(f"Benchmark: {self.benchmark}")
         logger.info(f"Output: {self.output_path}")
 
         if self.dry_run:
@@ -242,6 +300,12 @@ class ATLASBloombergLoader:
                 logger.error(traceback.format_exc())
                 results[sheet_name] = pd.DataFrame()
 
+        # Extract benchmark if configured
+        benchmark_df = pd.DataFrame()
+        if self.benchmark:
+            logger.info(f"Extracting benchmark: {self.benchmark}")
+            benchmark_df = self._extract_benchmark()
+
         if self.dry_run:
             logger.info("[DRY RUN] Skipping xlsx write")
             return
@@ -249,7 +313,7 @@ class ATLASBloombergLoader:
         # Only write if we got at least some data
         has_data = any(not df.empty for df in results.values())
         if has_data:
-            self._write_xlsx(results)
+            self._write_xlsx(results, benchmark=benchmark_df)
         else:
             logger.error("No data extracted for any field — output file not written")
 

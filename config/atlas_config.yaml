@@ -22,3 +22,6 @@ universes:
     - pbh
     - sx5e
     - splpeqty
+    - jp
+benchmarks:
+  jp: JP Index
