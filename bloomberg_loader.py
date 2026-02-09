@@ -41,8 +41,10 @@ class ATLASBloombergLoader:
         end_date_override: str | None = None,
         dry_run: bool = False,
         universe: str | None = None,
+        test: bool = False,
     ):
         self.dry_run = dry_run
+        self.test = test
         self.config = self._load_config(config_path)
 
         # Resolve universe: CLI override -> config default -> "sxxr"
@@ -69,6 +71,17 @@ class ATLASBloombergLoader:
         self.output_path = self.config["paths"]["output_xlsx"].format(
             universe=self.universe
         )
+
+        # Test mode: 5 tickers, batch_size=2 (3 batches), separate output
+        if self.test:
+            self.tickers = self.tickers[:5]
+            self.batch_size = 2
+            base, ext = os.path.splitext(self.output_path)
+            self.output_path = f"{base}_test{ext}"
+            logger.info(
+                f"TEST MODE: {len(self.tickers)} tickers, "
+                f"batch_size={self.batch_size}, output={self.output_path}"
+            )
 
         # Benchmark (optional, per-universe)
         benchmarks = self.config.get("benchmarks", {})
@@ -376,6 +389,11 @@ def main():
         help="Validate config and print plan without making API calls",
     )
     parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Test mode: 5 tickers, batch_size=2, writes to *_test.xlsx",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
@@ -395,6 +413,7 @@ def main():
         end_date_override=end_date,
         dry_run=args.dry_run,
         universe=args.universe,
+        test=args.test,
     )
     loader.run()
 
