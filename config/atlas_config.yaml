@@ -9,6 +9,12 @@ paths:
 bloomberg:
   batch_size: 250
   ticker_suffix: ' Equity'
+  # BDH options matching Excel formula: CDR=5D ensures every business day
+  # is returned, with forward-fill for sparse fields like IS_EPS
+  bdh_options:
+    Calendar: '5D'
+    Days: N
+    Fill: P
 fields:
   price: PX_LAST
   Pxtobook: PX_TO_BOOK_RATIO

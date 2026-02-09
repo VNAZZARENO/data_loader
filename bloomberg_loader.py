@@ -63,6 +63,7 @@ class ATLASBloombergLoader:
         self.end_date = self.config["parameters"]["end_date"]
         self.batch_size = self.config["bloomberg"]["batch_size"]
         self.ticker_suffix = self.config["bloomberg"]["ticker_suffix"]
+        self.bdh_options = self.config["bloomberg"].get("bdh_options", {})
         self.fields = self.config["fields"]  # e.g. {"price": "PX_LAST", ...}
         self.tickers = self._load_tickers(self.universe)
         self.output_path = self.config["paths"]["output_xlsx"].format(
@@ -141,6 +142,7 @@ class ATLASBloombergLoader:
                     flds=[bbg_field],
                     start_date=self.start_date,
                     end_date=self.end_date,
+                    **self.bdh_options,
                 )
                 if not df.empty:
                     all_results.append(df)
@@ -155,6 +157,7 @@ class ATLASBloombergLoader:
                             flds=[bbg_field],
                             start_date=self.start_date,
                             end_date=self.end_date,
+                            **self.bdh_options,
                         )
                         if not single.empty:
                             all_results.append(single)
@@ -219,6 +222,7 @@ class ATLASBloombergLoader:
                     flds=[bbg_field],
                     start_date=self.start_date,
                     end_date=self.end_date,
+                    **self.bdh_options,
                 )
                 if not df.empty:
                     # Flatten MultiIndex columns and take the single series
