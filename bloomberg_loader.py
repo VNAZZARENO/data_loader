@@ -172,7 +172,7 @@ class ATLASBloombergLoader:
             logger.error(f"  No data extracted for field {bbg_field}")
             return pd.DataFrame()
 
-        combined = pd.concat(all_results, axis=1)
+        combined = pd.concat(all_results, axis=1).sort_index()
 
         # xbbg returns MultiIndex columns: (ticker, field).
         # Flatten to just ticker names.
@@ -303,6 +303,19 @@ class ATLASBloombergLoader:
                 logger.error(f"Field-level failure for {bbg_field}: {e}")
                 logger.error(traceback.format_exc())
                 results[sheet_name] = pd.DataFrame()
+
+        # Align all sheets to the price date index (forward-fill sparse fields like EPS)
+        if "price" in results and not results["price"].empty:
+            master_index = results["price"].index
+            for sheet_name, df in results.items():
+                if sheet_name == "price" or df.empty:
+                    continue
+                if len(df) < len(master_index):
+                    logger.info(
+                        f"  Reindexing '{sheet_name}' from {len(df)} to "
+                        f"{len(master_index)} rows (forward-fill)"
+                    )
+                    results[sheet_name] = df.reindex(master_index).ffill()
 
         # Extract benchmark if configured
         benchmark_df = pd.DataFrame()
