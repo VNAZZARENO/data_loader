@@ -1,6 +1,6 @@
 parameters:
   start_date: '2013-01-01'
-  end_date: '2026-02-03'
+  # end_date: omit or set to null to use today's date
   period: D
   currency: EUR
 paths:

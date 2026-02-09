@@ -60,7 +60,7 @@ class ATLASBloombergLoader:
             self.config["parameters"]["end_date"] = end_date_override
 
         self.start_date = self.config["parameters"]["start_date"]
-        self.end_date = self.config["parameters"]["end_date"]
+        self.end_date = self.config["parameters"].get("end_date") or dt.date.today().isoformat()
         self.batch_size = self.config["bloomberg"]["batch_size"]
         self.ticker_suffix = self.config["bloomberg"]["ticker_suffix"]
         self.bdh_options = self.config["bloomberg"].get("bdh_options", {})
