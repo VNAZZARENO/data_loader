@@ -11,6 +11,7 @@ Usage:
     source .venv/bin/activate && python3 bloomberg_loader.py --dry-run
     source .venv/bin/activate && python3 bloomberg_loader.py --universe nky --dry-run
     source .venv/bin/activate && python3 bloomberg_loader.py --universe spx --today
+    source .venv/bin/activate && python3 bloomberg_loader.py --universe jp --daily
 """
 
 import argparse
@@ -42,9 +43,11 @@ class ATLASBloombergLoader:
         dry_run: bool = False,
         universe: str | None = None,
         test: bool = False,
+        daily: bool = False,
     ):
         self.dry_run = dry_run
         self.test = test
+        self.daily = daily
         self.config = self._load_config(config_path)
 
         # Resolve universe: CLI override -> config default -> "sxxr"
@@ -87,6 +90,25 @@ class ATLASBloombergLoader:
         benchmarks = self.config.get("benchmarks", {})
         self.benchmark = benchmarks.get(self.universe)
 
+        # Daily incremental mode: load existing data and override date range
+        self._existing_data: dict[str, pd.DataFrame] = {}
+        self._existing_benchmark: pd.DataFrame | None = None
+        if self.daily:
+            self._existing_data, self._existing_benchmark = self._load_existing_xlsx()
+            if "price" in self._existing_data and not self._existing_data["price"].empty:
+                last_date = self._existing_data["price"].index.max()
+                self.start_date = last_date.strftime("%Y-%m-%d")
+                self.end_date = dt.date.today().isoformat()
+                logger.info(
+                    f"Daily mode: existing data up to {last_date.date()}, "
+                    f"fetching {self.start_date} -> {self.end_date}"
+                )
+            else:
+                raise ValueError(
+                    f"Daily mode: existing file has no price data. "
+                    f"Run a full extraction first."
+                )
+
     # ------------------------------------------------------------------
     # Config
     # ------------------------------------------------------------------
@@ -117,6 +139,51 @@ class ATLASBloombergLoader:
         if not tickers:
             raise ValueError(f"Ticker file is empty: {ticker_file}")
         return tickers
+
+    # ------------------------------------------------------------------
+    # Load existing xlsx for daily incremental mode
+    # ------------------------------------------------------------------
+    def _load_existing_xlsx(self) -> tuple[dict[str, pd.DataFrame], pd.DataFrame | None]:
+        """Read existing output xlsx for daily incremental merging."""
+        if not os.path.isfile(self.output_path):
+            raise FileNotFoundError(
+                f"No existing file at {self.output_path}. "
+                f"Run a full extraction first."
+            )
+
+        logger.info(f"Daily mode: reading existing data from {self.output_path}")
+        existing_data: dict[str, pd.DataFrame] = {}
+
+        for sheet_name in self.fields:
+            try:
+                df = pd.read_excel(
+                    self.output_path, sheet_name=sheet_name, index_col=0
+                )
+                df.index = pd.to_datetime(df.index)
+                existing_data[sheet_name] = df
+                logger.info(
+                    f"  Loaded sheet '{sheet_name}': "
+                    f"{df.shape[0]} rows x {df.shape[1]} cols"
+                )
+            except Exception as e:
+                logger.warning(f"  Could not read sheet '{sheet_name}': {e}")
+                existing_data[sheet_name] = pd.DataFrame()
+
+        existing_benchmark = None
+        try:
+            bm = pd.read_excel(
+                self.output_path, sheet_name="benchmark", index_col=0
+            )
+            bm.index = pd.to_datetime(bm.index)
+            existing_benchmark = bm
+            logger.info(
+                f"  Loaded sheet 'benchmark': "
+                f"{bm.shape[0]} rows x {bm.shape[1]} cols"
+            )
+        except Exception:
+            logger.info("  No existing benchmark sheet found (OK)")
+
+        return existing_data, existing_benchmark
 
     # ------------------------------------------------------------------
     # Bloomberg extraction (3-tier error handling)
@@ -317,6 +384,26 @@ class ATLASBloombergLoader:
                 logger.error(traceback.format_exc())
                 results[sheet_name] = pd.DataFrame()
 
+        # Daily mode: merge new data with existing data
+        if self.daily and self._existing_data:
+            for sheet_name, new_df in results.items():
+                old_df = self._existing_data.get(sheet_name, pd.DataFrame())
+                if old_df.empty:
+                    continue
+                if new_df.empty:
+                    # No new data fetched — keep existing as-is
+                    results[sheet_name] = old_df
+                    logger.info(f"  '{sheet_name}': no new rows, keeping existing data")
+                    continue
+                merged = pd.concat([old_df, new_df])
+                merged = merged[~merged.index.duplicated(keep="last")].sort_index()
+                new_rows = len(merged) - len(old_df)
+                logger.info(
+                    f"  Merged '{sheet_name}': {len(old_df)} existing + "
+                    f"{new_rows} new rows = {len(merged)} total"
+                )
+                results[sheet_name] = merged
+
         # Align all sheets to the price date index (forward-fill sparse fields like EPS)
         if "price" in results and not results["price"].empty:
             master_index = results["price"].index
@@ -335,6 +422,21 @@ class ATLASBloombergLoader:
         if self.benchmark:
             logger.info(f"Extracting benchmark: {self.benchmark}")
             benchmark_df = self._extract_benchmark()
+
+        # Daily mode: merge benchmark
+        if self.daily and self._existing_benchmark is not None and not self._existing_benchmark.empty:
+            if benchmark_df.empty:
+                benchmark_df = self._existing_benchmark
+                logger.info("  Benchmark: no new rows, keeping existing data")
+            else:
+                merged_bm = pd.concat([self._existing_benchmark, benchmark_df])
+                merged_bm = merged_bm[~merged_bm.index.duplicated(keep="last")].sort_index()
+                new_bm_rows = len(merged_bm) - len(self._existing_benchmark)
+                logger.info(
+                    f"  Merged benchmark: {len(self._existing_benchmark)} existing + "
+                    f"{new_bm_rows} new rows = {len(merged_bm)} total"
+                )
+                benchmark_df = merged_bm
 
         if self.dry_run:
             logger.info("[DRY RUN] Skipping xlsx write")
@@ -394,6 +496,11 @@ def main():
         help="Test mode: 5 tickers, batch_size=2, writes to *_test.xlsx",
     )
     parser.add_argument(
+        "--daily",
+        action="store_true",
+        help="Incremental update: read existing xlsx, fetch from last date to today, merge",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
@@ -403,8 +510,13 @@ def main():
 
     logger.setLevel(getattr(logging, args.log_level))
 
+    if args.daily and args.start_date:
+        parser.error("--daily and --start-date are mutually exclusive")
+
     end_date = args.end_date
     if args.today:
+        end_date = dt.date.today().isoformat()
+    if args.daily:
         end_date = dt.date.today().isoformat()
 
     loader = ATLASBloombergLoader(
@@ -414,6 +526,7 @@ def main():
         dry_run=args.dry_run,
         universe=args.universe,
         test=args.test,
+        daily=args.daily,
     )
     loader.run()
 
