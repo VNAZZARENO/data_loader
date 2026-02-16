@@ -30,4 +30,4 @@ universes:
     - splpeqty
     - jp
 benchmarks:
-  jp: JP Index
+  jp: JPL Index
