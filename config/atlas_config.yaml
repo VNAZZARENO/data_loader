@@ -31,3 +31,9 @@ universes:
     - jp
 benchmarks:
   jp: JPL Index
+  sxxr: SXXR Index
+  nky: NKY Index
+  spx: SPX Index
+  sx5e: SX5E Index
+  pbh: WLSN Index
+  splpeqty: SPLPEQTY Index
