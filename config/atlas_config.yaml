@@ -2,7 +2,6 @@ parameters:
   start_date: '2013-01-01'
   # end_date: omit or set to null to use today's date
   period: D
-  currency: EUR
 paths:
   source_xlsx: X:\Quant\Data\ATLAS_data.xlsx
   output_xlsx: X:\Quant\Data\ATLAS_data_{universe}_static.xlsx
