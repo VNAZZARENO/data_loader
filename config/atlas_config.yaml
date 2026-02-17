@@ -28,6 +28,12 @@ universes:
     - sx5e
     - splpeqty
     - jp
+    - global_macro
+universe_overrides:
+  global_macro:
+    ticker_suffix: ''
+    fields:
+      price: PX_LAST
 benchmarks:
   jp: JPL Index
   sxxr: SXXR Index

@@ -67,9 +67,10 @@ class ATLASBloombergLoader:
         self.start_date = self.config["parameters"]["start_date"]
         self.end_date = self.config["parameters"].get("end_date") or dt.date.today().isoformat()
         self.batch_size = self.config["bloomberg"]["batch_size"]
-        self.ticker_suffix = self.config["bloomberg"]["ticker_suffix"]
-        self.bdh_options = self.config["bloomberg"].get("bdh_options", {})
-        self.fields = self.config["fields"]  # e.g. {"price": "PX_LAST", ...}
+        overrides = self.config.get("universe_overrides", {}).get(self.universe, {})
+        self.ticker_suffix = overrides.get("ticker_suffix", self.config["bloomberg"]["ticker_suffix"])
+        self.bdh_options = overrides.get("bdh_options", self.config["bloomberg"].get("bdh_options", {}))
+        self.fields = overrides.get("fields", self.config["fields"])
         self.tickers = self._load_tickers(self.universe)
         self.output_path = self.config["paths"]["output_xlsx"].format(
             universe=self.universe
