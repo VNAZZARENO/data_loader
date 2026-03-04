@@ -29,6 +29,7 @@ universes:
     - splpeqty
     - jp
     - global_macro
+    - igv
 universe_overrides:
   global_macro:
     ticker_suffix: ''
