@@ -14,10 +14,37 @@ bloomberg:
     Calendar: '5D'
     Days: N
     Fill: P
+# Default fields (used when no --agents flag is specified)
 fields:
   price: PX_LAST
   Pxtobook: PX_TO_BOOK_RATIO
   EPS: IS_EPS
+
+# Agent-specific field profiles (selected via --agents)
+agents:
+  default:
+    fields:
+      price: PX_LAST
+      Pxtobook: PX_TO_BOOK_RATIO
+      EPS: IS_EPS
+  squeeze:
+    fields:
+      price: PX_LAST
+      open: PX_OPEN
+      high: PX_HIGH
+      low: PX_LOW
+      volume: PX_VOLUME
+      short_int: SHORT_INT
+      si_pct_float: SI_PERCENT_OF_FLOAT
+      short_ratio: SHORT_INT_RATIO
+      sl_fee: SL_AVG_1M_FEE
+      sl_utilization: SL_UTILIZATION
+      sl_on_loan: SL_ON_LOAN_QTY
+      sl_lendable: SL_LENDABLE_QTY
+      float_shares: EQY_FLOAT
+      shares_out: EQY_SH_OUT
+      inst_pct: EQY_INST_PCT_SH_OUT
+      insider_pct: INSIDER_HOLDING_PCT
 universes:
   default: sxxr
   available:

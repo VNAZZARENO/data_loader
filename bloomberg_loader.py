@@ -12,6 +12,8 @@ Usage:
     source .venv/bin/activate && python3 bloomberg_loader.py --universe nky --dry-run
     source .venv/bin/activate && python3 bloomberg_loader.py --universe spx --today
     source .venv/bin/activate && python3 bloomberg_loader.py --universe jp --daily
+    source .venv/bin/activate && python3 bloomberg_loader.py --agents squeeze --universe sxxr
+    source .venv/bin/activate && python3 bloomberg_loader.py --agents all --universe sxxr --dry-run
 """
 
 import argparse
@@ -44,10 +46,12 @@ class ATLASBloombergLoader:
         universe: str | None = None,
         test: bool = False,
         daily: bool = False,
+        agents: str | None = None,
     ):
         self.dry_run = dry_run
         self.test = test
         self.daily = daily
+        self.agents = agents
         self.config = self._load_config(config_path)
 
         # Resolve universe: CLI override -> config default -> "sxxr"
@@ -70,11 +74,9 @@ class ATLASBloombergLoader:
         overrides = self.config.get("universe_overrides", {}).get(self.universe, {})
         self.ticker_suffix = overrides.get("ticker_suffix", self.config["bloomberg"]["ticker_suffix"])
         self.bdh_options = overrides.get("bdh_options", self.config["bloomberg"].get("bdh_options", {}))
-        self.fields = overrides.get("fields", self.config["fields"])
+        self.fields = self._resolve_fields(overrides)
         self.tickers = self._load_tickers(self.universe)
-        self.output_path = self.config["paths"]["output_xlsx"].format(
-            universe=self.universe
-        )
+        self.output_path = self._resolve_output_path()
 
         # Test mode: 5 tickers, batch_size=2 (3 batches), separate output
         if self.test:
@@ -124,6 +126,51 @@ class ATLASBloombergLoader:
             if key not in cfg:
                 raise KeyError(f"Missing required config key: {key}")
         return cfg
+
+    def _resolve_fields(self, universe_overrides: dict) -> dict:
+        """Resolve field set based on --agents flag.
+
+        Priority: universe_overrides > agent profile > default fields.
+        --agents all: union of all agent profiles.
+        --agents <name>: that agent's fields.
+        No flag: existing behavior (universe override or default fields).
+        """
+        if not self.agents:
+            return universe_overrides.get("fields", self.config["fields"])
+
+        agent_profiles = self.config.get("agents", {})
+        available_agents = list(agent_profiles.keys())
+
+        if self.agents == "all":
+            # Union of all agent field profiles
+            merged = {}
+            for profile in agent_profiles.values():
+                merged.update(profile.get("fields", {}))
+            logger.info(
+                f"Agent 'all': merged {len(merged)} fields from "
+                f"{', '.join(available_agents)}"
+            )
+            return merged
+
+        if self.agents not in agent_profiles:
+            raise ValueError(
+                f"Unknown agent '{self.agents}'. "
+                f"Available: {', '.join(available_agents + ['all'])}"
+            )
+
+        fields = agent_profiles[self.agents].get("fields", {})
+        logger.info(f"Agent '{self.agents}': {len(fields)} fields")
+        return fields
+
+    def _resolve_output_path(self) -> str:
+        """Build output path, appending agent suffix when applicable."""
+        base_path = self.config["paths"]["output_xlsx"].format(
+            universe=self.universe
+        )
+        if self.agents and self.agents != "default":
+            root, ext = os.path.splitext(base_path)
+            return f"{root}_{self.agents}{ext}"
+        return base_path
 
     @staticmethod
     def _load_tickers(universe: str) -> list[str]:
@@ -360,8 +407,9 @@ class ATLASBloombergLoader:
     # Main run
     # ------------------------------------------------------------------
     def run(self) -> None:
+        agent_str = f", agents={self.agents}" if self.agents else ""
         logger.info(
-            f"ATLAS Bloomberg Loader — universe={self.universe}, "
+            f"ATLAS Bloomberg Loader — universe={self.universe}{agent_str}, "
             f"{len(self.tickers)} tickers, {len(self.fields)} fields"
         )
         logger.info(f"Date range: {self.start_date} -> {self.end_date}")
@@ -487,6 +535,12 @@ def main():
         help="Ticker universe (sxxr, nky, spx, pbh, sx5e, splpeqty). Default: sxxr",
     )
     parser.add_argument(
+        "--agents",
+        default=None,
+        help="Agent field profile (default, squeeze, all). "
+             "Selects which Bloomberg fields to extract.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Validate config and print plan without making API calls",
@@ -528,6 +582,7 @@ def main():
         universe=args.universe,
         test=args.test,
         daily=args.daily,
+        agents=args.agents,
     )
     loader.run()
 
