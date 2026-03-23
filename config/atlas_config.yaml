@@ -57,11 +57,25 @@ universes:
     - jp
     - global_macro
     - igv
+    - euro_credit
 universe_overrides:
   global_macro:
     ticker_suffix: ''
     fields:
       price: PX_LAST
+  euro_credit:
+    ticker_suffix: ''
+    fields:
+      total_return: DAY_TO_DAY_TOT_RETURN_GROSS_DVDS
+      oas: OAS_SPREAD_BID
+      ytw: YLD_YTW_BID
+      duration: DUR_ADJ_MID
+      spread_duration: DUR_ADJ_OAS_BID
+      bid_ask: BID_ASK_SPREAD
+    bdh_options:
+      Calendar: '5D'
+      Days: N
+      Fill: P
 benchmarks:
   jp: JPL Index
   sxxr: SXXR Index
@@ -70,3 +84,4 @@ benchmarks:
   sx5e: SX5E Index
   pbh: WLSN Index
   splpeqty: SPLPEQTY Index
+  euro_credit: LECPTREU Index
