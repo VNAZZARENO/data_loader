@@ -53,8 +53,24 @@ source .venv/bin/activate && python3 bloomberg_loader.py --start-date 2020-01-01
 | `pbh` | 148 | Custom |
 | `splpeqty` | 38 | S&P Listed Private Equity |
 | `sx5e` | 37 | Euro Stoxx 50 |
+| `option_europe` | 50 | EU indices + Euro Stoxx 50 large caps (IV surface) |
 
 Ticker lists live in `tickers/<universe>.csv` (single `Ticker` column).
+
+### `option_europe` (implied-volatility surface)
+
+Dedicated universe for OTM-put / volatility-tail research on PEQ. Mixes
+European indices (with their listed-option chains) and liquid Euro Stoxx 50
+single stocks, so tickers carry their full Bloomberg suffix and
+`ticker_suffix` is set to `''`. Instead of the default price fields it pulls
+an implied-vol field set (defined in `universe_overrides.option_europe`):
+ATM call vol + options flow (continuity with the existing `sxxr` vol CSVs),
+named put implied vol (`PUT_IMP_VOL_30D/60D/90D`), and a downside moneyness
+surface (`{30,90,180,360}DAY_IMPVOL_{80,90,95}.0%MNY_DF`) for the OTM put wing.
+
+> The moneyness mnemonics must be validated against the Bloomberg terminal
+> (`FLDS`, or a `--test` run) and any that return empty pruned. Skew is
+> computed downstream from the moneyness points, not in the loader.
 
 ## Bloomberg fields
 

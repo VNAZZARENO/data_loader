@@ -58,6 +58,7 @@ universes:
     - global_macro
     - igv
     - euro_credit
+    - option_europe
 universe_overrides:
   global_macro:
     ticker_suffix: ''
@@ -72,6 +73,44 @@ universe_overrides:
       duration: DUR_ADJ_MID
       spread_duration: DUR_ADJ_OAS_BID
       bid_ask: BID_ASK_SPREAD
+    bdh_options:
+      Calendar: '5D'
+      Days: N
+      Fill: P
+  # IV-surface universe for OTM put / volatility-tail work (PEQ).
+  # Mixed equities + indices -> ticker_suffix '' (full tickers in CSV).
+  # NOTE: the moneyness mnemonics (*_IMPVOL_*%MNY_DF) must be validated
+  # against the Bloomberg terminal (FLDS / --test); prune any that return
+  # empty. PUT_IMP_VOL_* and the CALL_IMP_VOL_*/flow fields are the
+  # high-confidence continuity set already used for the sxxr vol CSVs.
+  option_europe:
+    ticker_suffix: ''
+    fields:
+      price: PX_LAST
+      # --- continuity: ATM call vol + options flow (existing sxxr fields) ---
+      vol_10d: CALL_IMP_VOL_10D
+      vol_1m: CALL_IMP_VOL_30D
+      vol_2m: CALL_IMP_VOL_60D
+      put_call_ratio: PUT_CALL_VOLUME_RATIO_CUR_DAY
+      total_call_volume: VOLUME_TOTAL_CALL
+      earning_implied_move: EARNINGS_RELATED_IMPLIED_MOVE
+      # --- put wing (named put implied vol, front / back month / 3M) ---
+      put_vol_1m: PUT_IMP_VOL_30D
+      put_vol_2m: PUT_IMP_VOL_60D
+      put_vol_3m: PUT_IMP_VOL_90D
+      # --- downside moneyness surface (OTM puts): tenor x moneyness ---
+      iv_1m_80mny: '30DAY_IMPVOL_80.0%MNY_DF'
+      iv_1m_90mny: '30DAY_IMPVOL_90.0%MNY_DF'
+      iv_1m_95mny: '30DAY_IMPVOL_95.0%MNY_DF'
+      iv_3m_80mny: '90DAY_IMPVOL_80.0%MNY_DF'
+      iv_3m_90mny: '90DAY_IMPVOL_90.0%MNY_DF'
+      iv_3m_95mny: '90DAY_IMPVOL_95.0%MNY_DF'
+      iv_6m_80mny: '180DAY_IMPVOL_80.0%MNY_DF'
+      iv_6m_90mny: '180DAY_IMPVOL_90.0%MNY_DF'
+      iv_6m_95mny: '180DAY_IMPVOL_95.0%MNY_DF'
+      iv_12m_80mny: '360DAY_IMPVOL_80.0%MNY_DF'
+      iv_12m_90mny: '360DAY_IMPVOL_90.0%MNY_DF'
+      iv_12m_95mny: '360DAY_IMPVOL_95.0%MNY_DF'
     bdh_options:
       Calendar: '5D'
       Days: N

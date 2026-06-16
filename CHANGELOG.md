@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-06-16
+
+### Added
+- `option_europe` universe: EU indices + Euro Stoxx 50 large caps for OTM-put /
+  volatility-tail research on PEQ
+- Implied-volatility field set for `option_europe` via
+  `universe_overrides.option_europe`: ATM call vol + options flow (continuity
+  with the `sxxr` vol CSVs), named put implied vol (`PUT_IMP_VOL_30D/60D/90D`),
+  and a downside moneyness surface (`{30,90,180,360}DAY_IMPVOL_{80,90,95}.0%MNY_DF`)
+- `tickers/option_europe.csv` (50 full-suffix tickers; `ticker_suffix: ''`)
+
 ## 2026-02-04
 
 ### Added
