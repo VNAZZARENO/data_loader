@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-17
+
+### Changed
+- `option_europe` IV field set locked to terminal-validated mnemonics
+  (`probe_iv_fields.py`): moneyness surface = tenors
+  `{30DAY,60DAY,3MTH,6MTH,12MTH,18MTH,24MTH}` x pillars `{90,95,97.5,100,105,110}`
+  (`_DF`). Adds back-month + LEAP (1Y/1.5Y/2Y) tenors that the first fetch missed.
+- Dropped `PUT_IMP_VOL_30D/60D/90D` fields (returned ATM vol, ~91% identical
+  to `CALL_IMP_VOL_*`; the put wing lives in the moneyness surface instead).
+- Note: Bloomberg publishes no <90% moneyness pillar for these names.
+
+### Fixed
+- `tickers/option_europe.csv`: `BYAN GY` -> `BAYN GY` (Bayer; bad ticker
+  returned no data on first fetch).
+
+### Added
+- `probe_iv_fields.py`: discovers valid moneyness IV mnemonics by sweeping
+  tenor/moneyness/suffix vocab on a single ticker over a short window.
+
 ## 2026-06-16
 
 ### Added

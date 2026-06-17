@@ -87,30 +87,60 @@ universe_overrides:
     ticker_suffix: ''
     fields:
       price: PX_LAST
-      # --- continuity: ATM call vol + options flow (existing sxxr fields) ---
+      # --- ATM call vol + options flow (continuity with sxxr vol CSVs) ---
       vol_10d: CALL_IMP_VOL_10D
       vol_1m: CALL_IMP_VOL_30D
       vol_2m: CALL_IMP_VOL_60D
       put_call_ratio: PUT_CALL_VOLUME_RATIO_CUR_DAY
       total_call_volume: VOLUME_TOTAL_CALL
       earning_implied_move: EARNINGS_RELATED_IMPLIED_MOVE
-      # --- put wing (named put implied vol, front / back month / 3M) ---
-      put_vol_1m: PUT_IMP_VOL_30D
-      put_vol_2m: PUT_IMP_VOL_60D
-      put_vol_3m: PUT_IMP_VOL_90D
-      # --- downside moneyness surface (OTM puts): tenor x moneyness ---
-      iv_1m_80mny: '30DAY_IMPVOL_80.0%MNY_DF'
-      iv_1m_90mny: '30DAY_IMPVOL_90.0%MNY_DF'
-      iv_1m_95mny: '30DAY_IMPVOL_95.0%MNY_DF'
-      iv_3m_80mny: '90DAY_IMPVOL_80.0%MNY_DF'
-      iv_3m_90mny: '90DAY_IMPVOL_90.0%MNY_DF'
-      iv_3m_95mny: '90DAY_IMPVOL_95.0%MNY_DF'
-      iv_6m_80mny: '180DAY_IMPVOL_80.0%MNY_DF'
-      iv_6m_90mny: '180DAY_IMPVOL_90.0%MNY_DF'
-      iv_6m_95mny: '180DAY_IMPVOL_95.0%MNY_DF'
-      iv_12m_80mny: '360DAY_IMPVOL_80.0%MNY_DF'
-      iv_12m_90mny: '360DAY_IMPVOL_90.0%MNY_DF'
-      iv_12m_95mny: '360DAY_IMPVOL_95.0%MNY_DF'
+      # --- moneyness IV surface (mnemonics validated via probe_iv_fields.py) ---
+      # tenors: 30DAY 60DAY 3MTH 6MTH 12MTH 18MTH 24MTH (front / back / LEAP)
+      # pillars: 90/95/97.5 = OTM put wing, 100 = ATM, 105/110 = call (skew/RR)
+      # NB: <90% moneyness (deep OTM) is NOT published by Bloomberg for these
+      # names -> deeper strikes require the option chain, not the surface.
+      iv_1m_90:     '30DAY_IMPVOL_90.0%MNY_DF'
+      iv_1m_95:     '30DAY_IMPVOL_95.0%MNY_DF'
+      iv_1m_975:    '30DAY_IMPVOL_97.5%MNY_DF'
+      iv_1m_100:    '30DAY_IMPVOL_100.0%MNY_DF'
+      iv_1m_105:    '30DAY_IMPVOL_105.0%MNY_DF'
+      iv_1m_110:    '30DAY_IMPVOL_110.0%MNY_DF'
+      iv_2m_90:     '60DAY_IMPVOL_90.0%MNY_DF'
+      iv_2m_95:     '60DAY_IMPVOL_95.0%MNY_DF'
+      iv_2m_975:    '60DAY_IMPVOL_97.5%MNY_DF'
+      iv_2m_100:    '60DAY_IMPVOL_100.0%MNY_DF'
+      iv_2m_105:    '60DAY_IMPVOL_105.0%MNY_DF'
+      iv_2m_110:    '60DAY_IMPVOL_110.0%MNY_DF'
+      iv_3m_90:     '3MTH_IMPVOL_90.0%MNY_DF'
+      iv_3m_95:     '3MTH_IMPVOL_95.0%MNY_DF'
+      iv_3m_975:    '3MTH_IMPVOL_97.5%MNY_DF'
+      iv_3m_100:    '3MTH_IMPVOL_100.0%MNY_DF'
+      iv_3m_105:    '3MTH_IMPVOL_105.0%MNY_DF'
+      iv_3m_110:    '3MTH_IMPVOL_110.0%MNY_DF'
+      iv_6m_90:     '6MTH_IMPVOL_90.0%MNY_DF'
+      iv_6m_95:     '6MTH_IMPVOL_95.0%MNY_DF'
+      iv_6m_975:    '6MTH_IMPVOL_97.5%MNY_DF'
+      iv_6m_100:    '6MTH_IMPVOL_100.0%MNY_DF'
+      iv_6m_105:    '6MTH_IMPVOL_105.0%MNY_DF'
+      iv_6m_110:    '6MTH_IMPVOL_110.0%MNY_DF'
+      iv_12m_90:    '12MTH_IMPVOL_90.0%MNY_DF'
+      iv_12m_95:    '12MTH_IMPVOL_95.0%MNY_DF'
+      iv_12m_975:   '12MTH_IMPVOL_97.5%MNY_DF'
+      iv_12m_100:   '12MTH_IMPVOL_100.0%MNY_DF'
+      iv_12m_105:   '12MTH_IMPVOL_105.0%MNY_DF'
+      iv_12m_110:   '12MTH_IMPVOL_110.0%MNY_DF'
+      iv_18m_90:    '18MTH_IMPVOL_90.0%MNY_DF'
+      iv_18m_95:    '18MTH_IMPVOL_95.0%MNY_DF'
+      iv_18m_975:   '18MTH_IMPVOL_97.5%MNY_DF'
+      iv_18m_100:   '18MTH_IMPVOL_100.0%MNY_DF'
+      iv_18m_105:   '18MTH_IMPVOL_105.0%MNY_DF'
+      iv_18m_110:   '18MTH_IMPVOL_110.0%MNY_DF'
+      iv_24m_90:    '24MTH_IMPVOL_90.0%MNY_DF'
+      iv_24m_95:    '24MTH_IMPVOL_95.0%MNY_DF'
+      iv_24m_975:   '24MTH_IMPVOL_97.5%MNY_DF'
+      iv_24m_100:   '24MTH_IMPVOL_100.0%MNY_DF'
+      iv_24m_105:   '24MTH_IMPVOL_105.0%MNY_DF'
+      iv_24m_110:   '24MTH_IMPVOL_110.0%MNY_DF'
     bdh_options:
       Calendar: '5D'
       Days: N

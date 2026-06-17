@@ -64,13 +64,19 @@ European indices (with their listed-option chains) and liquid Euro Stoxx 50
 single stocks, so tickers carry their full Bloomberg suffix and
 `ticker_suffix` is set to `''`. Instead of the default price fields it pulls
 an implied-vol field set (defined in `universe_overrides.option_europe`):
-ATM call vol + options flow (continuity with the existing `sxxr` vol CSVs),
-named put implied vol (`PUT_IMP_VOL_30D/60D/90D`), and a downside moneyness
-surface (`{30,90,180,360}DAY_IMPVOL_{80,90,95}.0%MNY_DF`) for the OTM put wing.
+ATM call vol + options flow (continuity with the existing `sxxr` vol CSVs)
+plus a moneyness IV surface across 7 tenors x 6 pillars.
 
-> The moneyness mnemonics must be validated against the Bloomberg terminal
-> (`FLDS`, or a `--test` run) and any that return empty pruned. Skew is
-> computed downstream from the moneyness points, not in the loader.
+Surface mnemonics were validated on the terminal with `probe_iv_fields.py`:
+
+- **Tenors:** `30DAY`, `60DAY`, `3MTH`, `6MTH`, `12MTH`, `18MTH`, `24MTH`
+  (front month, back month, and a 1Y/1.5Y/2Y LEAP ladder)
+- **Pillars (`_DF` suffix only):** `90 / 95 / 97.5` = OTM put wing, `100` = ATM,
+  `105 / 110` = call side (for skew / risk-reversal)
+
+> Bloomberg does **not** publish moneyness below 90% for these names, so the
+> deepest OTM put on the surface is ~10% OTM; deeper strikes need the option
+> chain. Skew is computed downstream from the pillars, not in the loader.
 
 ## Bloomberg fields
 
