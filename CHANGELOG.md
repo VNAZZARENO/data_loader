@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-06-22
+
+### Changed
+- `option_europe` single-stock list re-pointed from Euro Stoxx 50 constituents to the
+  **PEQ-held universe** (current holdings ∪ names held >15% of the position-panel
+  window) — 124 single names + 13 indices (137 total). Rationale: the tail-put overlay
+  can only be sized on names PEQ actually holds; the SX5E list overlapped PEQ by only 5
+  names. Non-optionable mid-caps return empty IV and are dropped by the loader.
+
 ## 2026-06-17
 
 ### Changed

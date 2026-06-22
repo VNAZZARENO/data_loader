@@ -53,16 +53,18 @@ source .venv/bin/activate && python3 bloomberg_loader.py --start-date 2020-01-01
 | `pbh` | 148 | Custom |
 | `splpeqty` | 38 | S&P Listed Private Equity |
 | `sx5e` | 37 | Euro Stoxx 50 |
-| `option_europe` | 50 | EU indices + Euro Stoxx 50 large caps (IV surface) |
+| `option_europe` | 137 | EU indices + PEQ-held single stocks (IV surface) |
 
 Ticker lists live in `tickers/<universe>.csv` (single `Ticker` column).
 
 ### `option_europe` (implied-volatility surface)
 
 Dedicated universe for OTM-put / volatility-tail research on PEQ. Mixes
-European indices (with their listed-option chains) and liquid Euro Stoxx 50
-single stocks, so tickers carry their full Bloomberg suffix and
-`ticker_suffix` is set to `''`. Instead of the default price fields it pulls
+European indices (with their listed-option chains) and the **PEQ-held single
+stocks** (current holdings + names held >15% of the position-panel window), so
+tail puts are only ever sized on underlyings the fund actually holds. Tickers
+carry their full Bloomberg suffix and `ticker_suffix` is set to `''`.
+Non-optionable mid-caps simply return empty IV (dropped by the loader). Instead of the default price fields it pulls
 an implied-vol field set (defined in `universe_overrides.option_europe`):
 ATM call vol + options flow (continuity with the existing `sxxr` vol CSVs)
 plus a moneyness IV surface across 7 tenors x 6 pillars.
