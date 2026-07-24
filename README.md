@@ -41,7 +41,50 @@ source .venv/bin/activate && python3 bloomberg_loader.py --start-date 2020-01-01
 | `--end-date` | Override end date (e.g. `2026-02-04`) |
 | `--today` | Set end date to today |
 | `--config` | Path to YAML config (default: `config/atlas_config.yaml`) |
+| `--mode` | Option universe mode: `static` (default), `bt`, `screening` |
+| `--fund` | Fund driving `--mode bt`/`screening` (default: `PEQ`) |
+| `--api-base-url` | GetFundPortfolios base URL |
+| `--refresh-universe` | `--mode bt`: rescan every position date instead of reusing the cache |
 | `--log-level` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
+
+### Option universe modes
+
+`option_europe` was a frozen 137-ticker CSV: EU indices plus the PEQ single
+stocks held for more than 15% of the position-panel window. That threshold
+silently dropped names the backtests actually trade (BMW, BNP, Novartis,
+Renault), which surfaces downstream as missing implied vol. `--mode` makes the
+list dynamic, sourcing positions from the GetFundPortfolios API over https
+(the loader runs on the Bloomberg terminal machine, not the dev box).
+
+```bash
+# Backtest universe: indices + every name PEQ has EVER held (no duration threshold)
+python3 bloomberg_loader.py --universe option_europe --mode bt
+
+# Rebuild that list from scratch (rescans all position dates, a few minutes)
+python3 bloomberg_loader.py --universe option_europe --mode bt --refresh-universe
+
+# Screening universe: indices + current holdings only, rolling 12-month window
+python3 bloomberg_loader.py --universe option_europe --mode screening
+```
+
+| Mode | Tickers | Window | Output file |
+|------|---------|--------|-------------|
+| `static` | frozen `tickers/option_europe.csv` (137) | full history | `ATLAS_data_option_europe_static.xlsx` |
+| `bt` | indices + all names ever held | full history | `ATLAS_data_option_europe_bt_static.xlsx` |
+| `screening` | indices + current holdings | rolling `screening_months` (12) | `ATLAS_data_option_screening_static.xlsx` |
+
+**Each mode writes its own file on purpose.** A screening run covers a handful
+of names over one year: pointing it at the bt or static path would destroy the
+long history the backtests depend on.
+
+`bt` caches its resolved list to `tickers/option_europe_bt.csv` so the date scan
+(~1400 API calls, a few minutes) happens once. Pass `--refresh-universe` to
+rebuild it after the fund has traded new names. Indices are always kept: they
+carry the listed-option chains used as hedging references and never appear in a
+position file.
+
+Settings live under `option_modes:` in `config/atlas_config.yaml` (`fund`,
+`api_base_url`, `bt_since`, `screening_months`, `output_universe`).
 
 ## Universes
 

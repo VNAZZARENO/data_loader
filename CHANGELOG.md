@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-07-24
+
+### Added
+- `--mode {static,bt,screening}` for the `option_*` universes, resolving tickers
+  dynamically instead of from a frozen CSV (`option_universe.py`).
+  - **bt**: indices + every name the fund has EVER held, no duration threshold.
+    Fixes the coverage hole left by the >15% rule: names the backtests trade
+    (BMW, BNP, Novartis, Renault) had no implied vol, which showed up downstream
+    as 65/98 basket names priceable in the PEQ overlay study.
+  - **screening**: indices + current holdings only, on a rolling
+    `screening_months` window (12), for the daily screener.
+- `--fund`, `--api-base-url`, `--refresh-universe` flags and an `option_modes:`
+  config block.
+
+### Changed
+- Each option mode writes its **own** output file (`option_europe_bt`,
+  `option_screening`). A screening run covers a handful of names over one year,
+  so writing it to the shared path would have destroyed the backtest history.
+
+### Notes
+- Positions come from the GetFundPortfolios API over **https**
+  (`https://pergam-tools/getfundportfolios-api`), not the local Flask instance,
+  because the loader runs on the Bloomberg terminal machine. The internal host
+  uses a self-signed certificate, so verification is disabled for these calls.
+- `bt` caches its list to `tickers/option_europe_bt.csv`: the date scan is
+  ~1400 API calls (a few minutes), done once, refreshed with
+  `--refresh-universe`.
+- `--mode static` is the default, so existing invocations are unchanged.
+
 ## 2026-06-22
 
 ### Changed

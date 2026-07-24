@@ -29,6 +29,9 @@ import yaml
 from tqdm import tqdm
 from xbbg import blp
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import option_universe  # noqa: E402  (local module, needs the path insert above)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -47,12 +50,24 @@ class ATLASBloombergLoader:
         test: bool = False,
         daily: bool = False,
         agents: str | None = None,
+        mode: str = "static",
+        fund: str | None = None,
+        api_base_url: str | None = None,
+        refresh_universe: bool = False,
     ):
         self.dry_run = dry_run
         self.test = test
         self.daily = daily
         self.agents = agents
+        self.mode = mode
+        self.refresh_universe = refresh_universe
         self.config = self._load_config(config_path)
+
+        opt_cfg = self.config.get("option_modes", {})
+        self.fund = fund or opt_cfg.get("fund", option_universe.DEFAULT_FUND)
+        self.api_base_url = api_base_url or opt_cfg.get(
+            "api_base_url", option_universe.DEFAULT_API_BASE_URL
+        )
 
         # Resolve universe: CLI override -> config default -> "sxxr"
         available = self.config["universes"]["available"]
@@ -75,8 +90,15 @@ class ATLASBloombergLoader:
         self.ticker_suffix = overrides.get("ticker_suffix", self.config["bloomberg"]["ticker_suffix"])
         self.bdh_options = overrides.get("bdh_options", self.config["bloomberg"].get("bdh_options", {}))
         self.fields = self._resolve_fields(overrides)
-        self.tickers = self._load_tickers(self.universe)
+        self.tickers = self._resolve_universe_tickers()
         self.output_path = self._resolve_output_path()
+
+        # Screening pulls only what is held today, so it does not need full
+        # history: default to a rolling window unless the caller overrode dates.
+        if self.mode == "screening" and not start_date_override:
+            months = self.config.get("option_modes", {}).get("screening_months", 12)
+            self.start_date = option_universe.screening_start_date(months)
+            logger.info(f"Screening mode: rolling {months}-month window from {self.start_date}")
 
         # Test mode: 5 tickers, batch_size=2 (3 batches), separate output
         if self.test:
@@ -163,14 +185,45 @@ class ATLASBloombergLoader:
         return fields
 
     def _resolve_output_path(self) -> str:
-        """Build output path, appending agent suffix when applicable."""
-        base_path = self.config["paths"]["output_xlsx"].format(
-            universe=self.universe
-        )
+        """Build output path, appending agent suffix when applicable.
+
+        Option modes get their OWN file. A screening run holds a handful of
+        names over one year: writing it to the bt/static path would silently
+        destroy the long history the backtests depend on.
+        """
+        universe_token = self.universe
+        if self.mode != "static":
+            token_map = self.config.get("option_modes", {}).get("output_universe", {})
+            universe_token = token_map.get(self.mode, f"{self.universe}_{self.mode}")
+
+        base_path = self.config["paths"]["output_xlsx"].format(universe=universe_token)
         if self.agents and self.agents != "default":
             root, ext = os.path.splitext(base_path)
             return f"{root}_{self.agents}{ext}"
         return base_path
+
+    def _resolve_universe_tickers(self) -> list[str]:
+        """Ticker list for this universe, honouring the option mode."""
+        loader_dir = os.path.dirname(os.path.abspath(__file__))
+        base_csv = os.path.join(loader_dir, "tickers", f"{self.universe}.csv")
+
+        if self.mode == "static":
+            return self._load_tickers(self.universe)
+
+        if not self.universe.startswith("option"):
+            raise ValueError(
+                f"--mode {self.mode} only applies to an option universe, got '{self.universe}'"
+            )
+
+        return option_universe.resolve_option_tickers(
+            mode=self.mode,
+            base_csv_path=base_csv,
+            cache_csv_path=os.path.join(loader_dir, "tickers", f"{self.universe}_bt.csv"),
+            fund=self.fund,
+            base_url=self.api_base_url,
+            since=self.config.get("option_modes", {}).get("bt_since"),
+            refresh=self.refresh_universe,
+        )
 
     @staticmethod
     def _load_tickers(universe: str) -> list[str]:
@@ -556,6 +609,32 @@ def main():
         help="Incremental update: read existing xlsx, fetch from last date to today, merge",
     )
     parser.add_argument(
+        "--mode",
+        choices=["static", "bt", "screening"],
+        default="static",
+        help="Option universe mode (option_* universes only). "
+             "static: frozen tickers/<universe>.csv (default, legacy behaviour). "
+             "bt: indices + every name the fund has ever held, cached to "
+             "tickers/<universe>_bt.csv. "
+             "screening: indices + current holdings only, rolling window.",
+    )
+    parser.add_argument(
+        "--fund",
+        default=None,
+        help="Fund whose positions drive --mode bt/screening (default: PEQ)",
+    )
+    parser.add_argument(
+        "--api-base-url",
+        default=None,
+        help="GetFundPortfolios base URL "
+             "(default: https://pergam-tools/getfundportfolios-api)",
+    )
+    parser.add_argument(
+        "--refresh-universe",
+        action="store_true",
+        help="--mode bt: rescan every position date instead of reusing the cached CSV",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
@@ -583,6 +662,10 @@ def main():
         test=args.test,
         daily=args.daily,
         agents=args.agents,
+        mode=args.mode,
+        fund=args.fund,
+        api_base_url=args.api_base_url,
+        refresh_universe=args.refresh_universe,
     )
     loader.run()
 
