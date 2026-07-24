@@ -19,6 +19,17 @@
   `option_screening`). A screening run covers a handful of names over one year,
   so writing it to the shared path would have destroyed the backtest history.
 
+### Changed
+- `tickers/sxxr.csv` refreshed to the **STOXX Europe 600 composition of Jul. 2026**
+  (source: `univers/STOXX600_07_2026.xlsx`). 59 names in / 59 out vs. the previous
+  (~early-2025) list, so the count stays at 600. Notable turnover: exits of names
+  taken private / acquired (Spectris, Mediobanca, Direct Line, IDS, Just Eat
+  Takeaway) or re-domiciled (Ashtead → NYSE); entries of post-2023 IPOs / additions
+  (Renk, Żabka, Lottomatica, Ayvens, Fresnillo, Bank of Georgia, Nordex…). Roche's
+  Bloomberg root changed `ROG` → `ROP` (now `ROP SE`), which shows up in the diff as
+  a paired out/in — it is the **same** constituent, not a membership change.
+  Backup of the prior list kept at `tickers/sxxr.csv.bak_2016preexport`.
+
 ### Notes
 - Positions come from the GetFundPortfolios API over **https**
   (`https://pergam-tools/getfundportfolios-api`), not the local Flask instance,
