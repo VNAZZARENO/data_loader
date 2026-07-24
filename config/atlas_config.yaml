@@ -166,6 +166,18 @@ universe_overrides:
       Calendar: '5D'
       Days: N
       Fill: P
+# --update-universe: refresh tickers/<universe>.csv from BDS INDX_MEMBERS on the
+# universe's benchmark index (below). The Bloomberg->project exchange-code map is
+# LEARNED from the existing CSV at runtime; this block only holds manual fallbacks
+# for a country with no existing sample, and an optional index override when the
+# membership index differs from the benchmark used for the return series.
+index_members:
+  # index_override:
+  #   sxxr: SXXP Index   # price-return twin; identical members to SXXR
+  exchange_code_map:
+    SW: SE   # SIX Swiss Exchange -> project convention (e.g. ROP SW -> ROP SE)
+    SM: SQ   # Bolsa de Madrid    -> project convention (e.g. SAN SM -> SAN SQ)
+
 benchmarks:
   jp: JPL Index
   sxxr: SXXR Index

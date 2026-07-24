@@ -29,6 +29,11 @@ source .venv/bin/activate && python3 bloomberg_loader.py --universe spx --dry-ru
 
 # Override date range
 source .venv/bin/activate && python3 bloomberg_loader.py --start-date 2020-01-01 --today
+
+# Refresh the ticker list from the live index membership, then exit
+source .venv/bin/activate && python3 bloomberg_loader.py --universe sxxr --update-universe
+# Preview the joiners/leavers diff without writing
+source .venv/bin/activate && python3 bloomberg_loader.py --universe sxxr --update-universe --dry-run
 ```
 
 ### CLI flags
@@ -45,7 +50,52 @@ source .venv/bin/activate && python3 bloomberg_loader.py --start-date 2020-01-01
 | `--fund` | Fund driving `--mode bt`/`screening` (default: `PEQ`) |
 | `--api-base-url` | GetFundPortfolios base URL |
 | `--refresh-universe` | `--mode bt`: rescan every position date instead of reusing the cache |
+| `--update-universe` | Refresh `tickers/<universe>.csv` from live `INDX_MEMBERS`, then exit (preview with `--dry-run`) |
+| `--yes` / `-y` | Skip the `--update-universe` confirmation prompt (cron / unattended) |
 | `--log-level` | `DEBUG`, `INFO`, `WARNING`, or `ERROR` |
+
+### Refreshing a universe (`--update-universe`)
+
+Rebuilds `tickers/<universe>.csv` from the **live Bloomberg index membership** —
+`BDS INDX_MEMBERS` on the universe's benchmark index (`benchmarks:` in the
+config, e.g. `sxxr` → `SXXR Index`) — then exits without extracting. Bloomberg
+returns the current constituents *with their tickers*, so there is no
+name→ticker guessing (the public STOXX components PDF carries only company names
+and, on the free site, lags the real index by years).
+
+Bloomberg's standard exchange codes are converted to this project's convention
+(`ROP SW`→`ROP SE`, `SAN SM`→`SAN SQ`) via a map **learned at runtime from the
+existing CSV** (matched on the ticker root): the ~590 continuing names keep their
+exact current form, only genuine joiners run through the map. Manual fallbacks
+live in `index_members.exchange_code_map`. Safety: aborts on a >50% drop in
+member count, backs the old list up to `<csv>.bak`, and `--dry-run` prints the
+joiners/leavers diff without writing. Requires a running Bloomberg terminal.
+
+Before writing, it shows the changes and asks to confirm:
+
+```
+============================================================
+  Mise a jour de l'univers 'sxxr'  <-  SXXR Index
+============================================================
+  10 ajout(s) :
+    + RENK GY
+    ...
+  8 suppression(s) :
+    - SXS LN
+    ...
+------------------------------------------------------------
+  600 -> 600 tickers
+  Accepter ? [Y/n]
+```
+
+`--yes` skips the prompt for unattended runs; a non-interactive stdin refuses to
+write rather than hang.
+
+```bash
+python3 bloomberg_loader.py --universe sxxr --update-universe --dry-run  # preview
+python3 bloomberg_loader.py --universe sxxr --update-universe            # prompt, then write
+python3 bloomberg_loader.py --universe sxxr --update-universe --yes      # cron: no prompt
+```
 
 ### Option universe modes
 

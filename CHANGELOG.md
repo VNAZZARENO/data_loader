@@ -3,6 +3,21 @@
 ## 2026-07-24
 
 ### Added
+- `--update-universe`: refresh `tickers/<universe>.csv` from the **live Bloomberg
+  index membership** (`BDS INDX_MEMBERS` on the universe's benchmark index), then
+  exit without extracting. New module `index_members.py`. The authoritative
+  source is Bloomberg itself, so tickers come back directly — no name→ticker
+  mapping (the public STOXX components PDF has only company names and lags the
+  real index by years). Bloomberg's standard exchange codes are mapped to this
+  project's convention (`ROP SW`→`ROP SE`, `SAN SM`→`SAN SQ`) by a map **learned
+  at runtime from the existing CSV** (match on ticker root), so continuing
+  constituents keep their exact form and only genuine joiners are converted;
+  `index_members.exchange_code_map` in the config holds manual fallbacks.
+  Before writing it prints an `N ajouts / M suppressions` summary and asks
+  `Accepter ? [Y/n]`; `--yes`/`-y` skips it (cron), and a non-interactive stdin
+  refuses to write rather than hang. Guardrails: aborts on a >50% member-count
+  drop, backs up the prior CSV to `.bak`, skips the write when nothing changed,
+  and `--dry-run` previews the diff without writing.
 - `--mode {static,bt,screening}` for the `option_*` universes, resolving tickers
   dynamically instead of from a frozen CSV (`option_universe.py`).
   - **bt**: indices + every name the fund has EVER held, no duration threshold.

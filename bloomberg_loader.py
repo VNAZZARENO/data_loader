@@ -31,6 +31,7 @@ from xbbg import blp
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import option_universe  # noqa: E402  (local module, needs the path insert above)
+import index_members  # noqa: E402  (local module, needs the path insert above)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -635,6 +636,22 @@ def main():
         help="--mode bt: rescan every position date instead of reusing the cached CSV",
     )
     parser.add_argument(
+        "--update-universe",
+        action="store_true",
+        help="Refresh tickers/<universe>.csv from the live Bloomberg index "
+             "membership (BDS INDX_MEMBERS on the universe's benchmark index), "
+             "then exit without extracting. Prompts for confirmation before "
+             "writing. Combine with --dry-run to preview the joiners/leavers "
+             "diff without writing.",
+    )
+    parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Skip the --update-universe confirmation prompt (for cron / "
+             "unattended runs).",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
@@ -643,6 +660,36 @@ def main():
     args = parser.parse_args()
 
     logger.setLevel(getattr(logging, args.log_level))
+
+    # --update-universe: refresh the ticker CSV from live index membership,
+    # then exit. Handled before building the loader so it never loads the
+    # stale list it is about to replace.
+    if args.update_universe:
+        cfg = ATLASBloombergLoader._load_config(args.config)
+        universe = args.universe or cfg["universes"].get("default", "sxxr")
+        im_cfg = cfg.get("index_members", {})
+        index = im_cfg.get("index_override", {}).get(universe) or cfg.get(
+            "benchmarks", {}
+        ).get(universe)
+        if not index:
+            parser.error(
+                f"--update-universe: no index known for universe '{universe}'. "
+                f"Add it under 'benchmarks:' or 'index_members.index_override:' "
+                f"in the config."
+            )
+        csv_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "tickers", f"{universe}.csv"
+        )
+        index_members.refresh_universe_csv(
+            universe=universe,
+            index=index,
+            csv_path=csv_path,
+            blp_module=blp,
+            override_map=im_cfg.get("exchange_code_map", {}),
+            dry_run=args.dry_run,
+            assume_yes=args.yes,
+        )
+        return
 
     if args.daily and args.start_date:
         parser.error("--daily and --start-date are mutually exclusive")
