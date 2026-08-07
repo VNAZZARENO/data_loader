@@ -27,6 +27,26 @@ agents:
       price: PX_LAST
       Pxtobook: PX_TO_BOOK_RATIO
       EPS: IS_EPS
+  # Profil "conviction" (2026-08-07) — donnees v4 pour psc / pbh / stoxx600_v2
+  # (recherche QR/ATLAS atlas_conviction : revisions de consensus, PEAD,
+  # shareholder yield). Sortie dans ATLAS_data_{universe}_static_conviction.xlsx
+  # (fichier PROPRE — n'ecrase jamais le _static principal).
+  # NOTE terminal : valider BEST_* via --dry-run/--test avant la premiere
+  # extraction complete (periode fiscale par defaut de BEST_EPS/BEST_SALES =
+  # 1BF ; ce loader a champs plats ne passe pas BEST_FPERIOD_OVERRIDE).
+  # ANNOUNCEMENT_DT en BDH quotidien = date du dernier resultat annonce
+  # connu ce jour-la -> masques point-in-time exacts.
+  conviction:
+    fields:
+      price: PX_LAST
+      best_eps: BEST_EPS
+      best_sales: BEST_SALES
+      announcement_dt: ANNOUNCEMENT_DT
+      shares_out: EQY_SH_OUT
+      insider_pct: INSIDER_HOLDING_PCT
+      short_int: SHORT_INT
+      si_pct_float: SI_PERCENT_OF_FLOAT
+      div_yield: EQY_DVD_YLD_12M
   squeeze:
     fields:
       price: PX_LAST
