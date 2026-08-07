@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-08-07
+
+### Changed
+- `tickers/pbh.csv` resynchronisé sur l'univers PBH réellement tradé
+  (`universes/PBH/data/pbh_price_data.xlsx`, feuille `price`) : 145 → **208
+  tickers**, suppression de 14 entrées obsolètes/doublons en minuscules
+  (`FRPH US`, `TEQ SS`, `albon fp`, `tracb ss`…), ajout des 77 manquants
+  (holdings JP/HK ajoutées en 2026, `ASKER SS`, `3382 JT`, `700 HK`…).
+  Motif : `ATLAS_data_pbh_static.xlsx` n'a jamais été produit et la liste
+  loader avait divergé de l'univers vivant. `tickers/igv.csv` vérifié à
+  l'identique de l'univers PSC (113/113, aucun changement).
+  **À faire sur le PC Bloomberg** : extraction complète
+  `python bloomberg_loader.py --universe pbh` pour produire
+  `ATLAS_data_pbh_static.xlsx` (prix + EPS + Pxtobook), et re-extraction
+  `--universe igv` pour reconstruire les feuilles EPS/Pxtobook détruites par
+  l'updater quotidien PSC (cf. audit QR/ATLAS
+  `docs/audit/2026-08-07-audit-psc.md` §1.1 — appliquer aussi le patch
+  `docs/audit/patches-2026-08-07-incumbents.patch` AVANT, sinon elles seront
+  redétruites au prochain run de 01:30).
+
 ## 2026-07-24
 
 ### Added
