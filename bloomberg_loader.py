@@ -22,16 +22,24 @@ import datetime as dt
 import logging
 import os
 import sys
+import time
 import traceback
 
 import pandas as pd
 import yaml
 from tqdm import tqdm
-from xbbg import blp
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import option_universe  # noqa: E402  (local module, needs the path insert above)
 import index_members  # noqa: E402  (local module, needs the path insert above)
+from dl import manifests, smbio  # noqa: E402
+
+
+def _default_blp():
+    """xbbg is only installed on the Bloomberg box; import it on first real use."""
+    from xbbg import blp
+
+    return blp
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,7 +63,10 @@ class ATLASBloombergLoader:
         fund: str | None = None,
         api_base_url: str | None = None,
         refresh_universe: bool = False,
+        blp_module=None,
     ):
+        self._blp = blp_module
+        self._field_reports: dict[str, manifests.FieldReport] = {}
         self.dry_run = dry_run
         self.test = test
         self.daily = daily
@@ -116,6 +127,14 @@ class ATLASBloombergLoader:
         benchmarks = self.config.get("benchmarks", {})
         self.benchmark = benchmarks.get(self.universe)
 
+        self._manifest = manifests.RunManifest(
+            universe=self.universe,
+            profile=self.agents or "default",
+            mode=self.mode,
+            daily=self.daily,
+            n_requested=len(self.tickers),
+        )
+
         # Daily incremental mode: load existing data and override date range
         self._existing_data: dict[str, pd.DataFrame] = {}
         self._existing_benchmark: pd.DataFrame | None = None
@@ -134,6 +153,12 @@ class ATLASBloombergLoader:
                     f"Daily mode: existing file has no price data. "
                     f"Run a full extraction first."
                 )
+
+    @property
+    def blp(self):
+        if self._blp is None:
+            self._blp = _default_blp()
+        return self._blp
 
     # ------------------------------------------------------------------
     # Config
@@ -312,6 +337,8 @@ class ATLASBloombergLoader:
         all_results: list[pd.DataFrame] = []
         failed_tickers: list[str] = []
         n_batches = (len(bbg_tickers) - 1) // self.batch_size + 1
+        fallback_batches = 0
+        t0 = time.monotonic()
 
         for i in range(0, len(bbg_tickers), self.batch_size):
             batch = bbg_tickers[i : i + self.batch_size]
@@ -319,7 +346,7 @@ class ATLASBloombergLoader:
             logger.info(f"  Batch {batch_num}/{n_batches} ({len(batch)} tickers)")
 
             try:
-                df = blp.bdh(
+                df = self.blp.bdh(
                     tickers=batch,
                     flds=[bbg_field],
                     start_date=self.start_date,
@@ -331,10 +358,11 @@ class ATLASBloombergLoader:
             except Exception as e:
                 logger.error(f"  Batch {batch_num} failed: {e}")
                 logger.info("  Falling back to per-ticker extraction for this batch")
+                fallback_batches += 1
 
                 for ticker in tqdm(batch, desc=f"  Batch {batch_num} fallback"):
                     try:
-                        single = blp.bdh(
+                        single = self.blp.bdh(
                             tickers=[ticker],
                             flds=[bbg_field],
                             start_date=self.start_date,
@@ -350,8 +378,18 @@ class ATLASBloombergLoader:
                         logger.warning(f"    Failed {ticker}: {te}")
                         failed_tickers.append(ticker)
 
+        report = manifests.FieldReport(
+            bbg_field=bbg_field,
+            failed=sorted(failed_tickers),
+            batches=n_batches,
+            fallback_batches=fallback_batches,
+        )
+        self._field_reports[bbg_field] = report
+
         if not all_results:
             logger.error(f"  No data extracted for field {bbg_field}")
+            report.missing = sorted(set(bbg_tickers) - set(failed_tickers))
+            report.seconds = round(time.monotonic() - t0, 2)
             return pd.DataFrame()
 
         combined = pd.concat(all_results, axis=1).sort_index()
@@ -360,6 +398,17 @@ class ATLASBloombergLoader:
         # Flatten to just ticker names.
         if isinstance(combined.columns, pd.MultiIndex):
             combined = combined.droplevel(1, axis=1)
+
+        # A batch can silently return fewer columns than requested: persist the gap.
+        returned = set(combined.columns)
+        report.n_returned = len(returned)
+        report.missing = sorted(set(bbg_tickers) - returned - set(failed_tickers))
+        report.seconds = round(time.monotonic() - t0, 2)
+        if report.missing:
+            logger.warning(
+                f"  {len(report.missing)} tickers requested but absent from the "
+                f"response for {bbg_field}: " + ", ".join(report.missing[:20])
+            )
 
         # Strip the " Equity" suffix so columns match the original xlsx headers.
         combined.columns = [c.replace(self.ticker_suffix, "") for c in combined.columns]
@@ -399,7 +448,7 @@ class ATLASBloombergLoader:
         for sheet_name, bbg_field in self.fields.items():
             logger.info(f"  Benchmark {self.benchmark} — {bbg_field}")
             try:
-                df = blp.bdh(
+                df = self.blp.bdh(
                     tickers=[self.benchmark],
                     flds=[bbg_field],
                     start_date=self.start_date,
@@ -427,9 +476,21 @@ class ATLASBloombergLoader:
         """Write all results to a multi-sheet xlsx file."""
         logger.info(f"Writing output to {self.output_path}")
 
-        os.makedirs(os.path.dirname(self.output_path) or ".", exist_ok=True)
+        # Write to a temp file then rename: the 18:15 ATLAS cron must never
+        # read a half-written workbook.
+        t0 = time.monotonic()
+        smbio.atomic_write_via(
+            self.output_path, lambda tmp: self._write_xlsx_to(tmp, results, benchmark)
+        )
+        self._manifest.xlsx = {
+            "path": str(self.output_path),
+            "bytes": os.path.getsize(self.output_path),
+            "seconds": round(time.monotonic() - t0, 2),
+        }
+        logger.info(f"Output written: {self.output_path}")
 
-        with pd.ExcelWriter(self.output_path, engine="openpyxl") as writer:
+    def _write_xlsx_to(self, path, results: dict[str, pd.DataFrame], benchmark: pd.DataFrame | None) -> None:
+        with pd.ExcelWriter(path, engine="openpyxl") as writer:
             # parameters sheet
             params_df = pd.DataFrame(
                 list(self.config["parameters"].items()),
@@ -455,12 +516,37 @@ class ATLASBloombergLoader:
                     f"{benchmark.shape[0]} rows x {benchmark.shape[1]} cols"
                 )
 
-        logger.info(f"Output written: {self.output_path}")
-
     # ------------------------------------------------------------------
     # Main run
     # ------------------------------------------------------------------
     def run(self) -> None:
+        """Run the extraction and always persist a run manifest (unless dry-run)."""
+        error = None
+        try:
+            self._run()
+        except Exception as e:
+            error = f"{type(e).__name__}: {e}"
+            raise
+        finally:
+            if not self.dry_run:
+                self._write_manifest(error)
+
+    def _write_manifest(self, error: str | None) -> None:
+        m = self._manifest
+        m.date_range = [str(self.start_date), str(self.end_date)]
+        m.per_field = {
+            alias: self._field_reports[f]
+            for alias, f in self.fields.items()
+            if f in self._field_reports
+        }
+        m.finish(error)
+        try:
+            path = manifests.write(m, self.config)
+            logger.info(f"Run manifest ({m.status}): {path}")
+        except OSError as e:  # the share being down must not mask the run result
+            logger.warning(f"Could not write run manifest: {e}")
+
+    def _run(self) -> None:
         agent_str = f", agents={self.agents}" if self.agents else ""
         logger.info(
             f"ATLAS Bloomberg Loader — universe={self.universe}{agent_str}, "
@@ -684,7 +770,7 @@ def main():
             universe=universe,
             index=index,
             csv_path=csv_path,
-            blp_module=blp,
+            blp_module=_default_blp(),
             override_map=im_cfg.get("exchange_code_map", {}),
             dry_run=args.dry_run,
             assume_yes=args.yes,

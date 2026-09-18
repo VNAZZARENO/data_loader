@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pergam-data-loader"
+version = "0.2.0"
+description = "Loader Bloomberg ATLAS : registre d'univers, store parquet, dashboard"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    "numpy",
+    "pyarrow>=15",
+    "openpyxl",
+    "PyYAML",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+bbg = ["xbbg==0.11.0"]
+dashboard = ["fastapi", "uvicorn", "jinja2", "apscheduler", "python-multipart"]
+dev = ["pytest", "httpx"]
+
+[tool.setuptools]
+packages = ["dl", "dl.registry", "dl.store", "dashboard", "dashboard.routers"]
+py-modules = ["bloomberg_loader", "index_members", "option_universe"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
