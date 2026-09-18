@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% block title %}Nouvel univers{% endblock %}
+{% block main %}
+<h2>Nouvel univers</h2><p class="sub">Disponible pour le loader des sa creation, sans edition du YAML : <code>python bloomberg_loader.py --universe &lt;nom&gt;</code>.</p>
+<div class="card"><h3>1 · Source</h3><div class="steps" id="src">
+ <label class="opt on"><input type="radio" name="s" value="paste" checked hidden><b>Coller une liste</b><span>Tickers normalises a la convention du projet.</span></label>
+ <label class="opt"><input type="radio" name="s" value="index" hidden><b>Indice Bloomberg</b><span>Composition recuperee par le loader au prochain passage.</span></label>
+ <label class="opt"><input type="radio" name="s" value="combine" hidden><b>Combiner</b><span>Union, intersection ou difference d'univers.</span></label>
+ <label class="opt"><input type="radio" name="s" value="clone" hidden><b>Cloner</b><span>Copie complete, historique inclus.</span></label>
+ <label class="opt"><input type="radio" name="s" value="filter" hidden><b>Filtrer</b><span>Sous-ensemble par place, secteur ou devise.</span></label></div></div>
+<div class="card"><h3>2 · Contenu</h3>
+ <div data-for="paste"><div class="row"><label>Convention<select id="suffix"><option value=" Equity">Actions (sans suffixe « Equity »)</option><option value="">Mixte (cle jaune conservee)</option></select></label>
+  <label>Benchmark (optionnel)<input id="bench" placeholder="SXXR Index"></label></div><textarea id="text" placeholder="MC FP&#10;ROG SW Equity&#10;SAN SM"></textarea>
+  <div class="row" style="margin-top:8px"><button id="btnNorm">Apercu de la normalisation</button><span id="normInfo" class="muted"></span></div></div>
+ <div data-for="index" hidden><div class="row"><label>Ticker de l'indice<input id="index" placeholder="SXXP Index"></label></div>
+  <p class="muted">L'univers est cree vide ; la composition arrive dans « Requetes Bloomberg » pour validation.</p></div>
+ <div data-for="combine" hidden><div class="row"><label>Operation<select id="how"><option value="union">Union</option><option value="intersection">Intersection</option><option value="difference">Difference (1er − autres)</option></select></label>
+  <label>Univers (Ctrl+clic)<select id="many" multiple size="8" style="min-width:220px"></select></label></div></div>
+ <div data-for="clone" hidden><div class="row"><label>Univers source<select id="fromClone"></select></label></div></div>
+ <div data-for="filter" hidden><div class="row"><label>Univers source<select id="fromFilter"></select></label><label>Places (ex. FP, GY)<input id="exch"></label>
+  <label>Devises (ex. EUR)<input id="ccy"></label><label>Secteurs GICS<input id="sect" placeholder="Health Care"></label></div>
+  <p class="muted">Secteur et devise viennent des donnees de reference du store (disponibles apres une extraction).</p></div></div>
+<div class="card"><h3>3 · Identite</h3><div class="row"><label>Nom (minuscules, chiffres, _)<input id="name" placeholder="mon_panier"></label><label>Libelle<input id="label" style="min-width:260px"></label>
+ <label>Profil de champs<select id="profile"><option value="">defaut</option>{% for p in profiles %}<option>{{ p }}</option>{% endfor %}</select></label>
+ <button class="primary" id="btnCreate">Creer l'univers</button></div></div>
+{% endblock %}
+{% block script %}<script>
+const src = () => $("input[name=s]:checked").value, csv = id => $(id).value.split(",").map(s => s.trim()).filter(Boolean);
+$$("#src .opt").forEach(o => o.onclick = () => { $$("#src .opt").forEach(x => x.classList.toggle("on", x === o)); $("input", o).checked = true;
+  $$("[data-for]").forEach(d => d.hidden = d.dataset.for !== src()); });
+api("GET", "/universes").then(us => ["#many", "#fromClone", "#fromFilter"].forEach(id => $(id).innerHTML = us.map(u => `<option value="${u.universe}">${esc(u.universe)} (${u.n_active})</option>`).join(""))).catch(fail);
+$("#btnNorm").onclick = () => api("POST", "/normalize", {text: $("#text").value, ticker_suffix: $("#suffix").value}).then(r => $("#normInfo").textContent =
+  `${r.tickers.length} ticker(s)` + (Object.keys(r.changed).length ? ` · ${Object.keys(r.changed).length} normalise(s) : ${Object.entries(r.changed).slice(0, 6).map(([a, b]) => `${a} → ${b}`).join(", ")}` : "")
+  + (r.duplicates.length ? ` · doublons : ${r.duplicates.join(", ")}` : "") + (r.unknown_exchanges.length ? ` · places inconnues : ${r.unknown_exchanges.join(", ")}` : "")).catch(fail);
+$("#btnCreate").onclick = () => { const s = src(), body = {name: $("#name").value.trim(), label: $("#label").value.trim(), source: s, fields_profile: $("#profile").value};
+  if (s === "paste") Object.assign(body, {text: $("#text").value, ticker_suffix: $("#suffix").value, benchmark: $("#bench").value.trim()});
+  if (s === "index") body.index = $("#index").value.trim();
+  if (s === "combine") Object.assign(body, {how: $("#how").value, universes: [...$("#many").selectedOptions].map(o => o.value)});
+  if (s === "clone") body.from = $("#fromClone").value;
+  if (s === "filter") Object.assign(body, {from: $("#fromFilter").value, exchanges: csv("#exch"), currencies: csv("#ccy"), sectors: csv("#sect")});
+  api("POST", "/universes", body).then(r => location.href = `${BASE}/u/${r.universe}`).catch(fail); };
+</script>{% endblock %}

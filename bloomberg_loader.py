@@ -32,7 +32,10 @@ from tqdm import tqdm
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import option_universe  # noqa: E402  (local module, needs the path insert above)
 import index_members  # noqa: E402  (local module, needs the path insert above)
-from dl import manifests, smbio  # noqa: E402
+from dl import manifests, registry, requests_worker, smbio  # noqa: E402
+from dl.store import derive as store_derive  # noqa: E402
+from dl.store import fx as store_fx  # noqa: E402
+from dl.store import layout as store_layout, legacy_xlsx, reader as store_reader, writer as store_writer  # noqa: E402
 
 
 def _default_blp():
@@ -81,14 +84,21 @@ class ATLASBloombergLoader:
             "api_base_url", option_universe.DEFAULT_API_BASE_URL
         )
 
-        # Resolve universe: CLI override -> config default -> "sxxr"
-        available = self.config["universes"]["available"]
+        # Resolve universe: CLI override -> config default -> "sxxr".
+        # A universe created in the dashboard lives only in the share registry:
+        # it needs no YAML edit to be extractable.
+        available = list(self.config["universes"]["available"])
+        try:
+            available += [u for u in registry.list_universes(self.config) if u not in available]
+        except OSError as e:
+            logger.warning(f"Universe registry unreachable ({e}); using config list only")
         self.universe = universe or self.config["universes"].get("default", "sxxr")
         if self.universe not in available:
             raise ValueError(
                 f"Unknown universe '{self.universe}'. "
                 f"Available: {', '.join(available)}"
             )
+        self._registry_entry = self._load_registry_entry()
 
         if start_date_override:
             self.config["parameters"]["start_date"] = start_date_override
@@ -99,11 +109,22 @@ class ATLASBloombergLoader:
         self.end_date = self.config["parameters"].get("end_date") or dt.date.today().isoformat()
         self.batch_size = self.config["bloomberg"]["batch_size"]
         overrides = self.config.get("universe_overrides", {}).get(self.universe, {})
-        self.ticker_suffix = overrides.get("ticker_suffix", self.config["bloomberg"]["ticker_suffix"])
+        reg = self._registry_entry
+        in_config = self.universe in self.config["universes"]["available"]
+        default_suffix = self.config["bloomberg"]["ticker_suffix"]
+        if reg is not None and not in_config:
+            default_suffix = reg.ticker_suffix
+            if not self.agents and reg.fields_profile:
+                self.agents = reg.fields_profile
+        self.ticker_suffix = overrides.get("ticker_suffix", default_suffix)
         self.bdh_options = overrides.get("bdh_options", self.config["bloomberg"].get("bdh_options", {}))
         self.fields = self._resolve_fields(overrides)
         self.tickers = self._resolve_universe_tickers()
         self.output_path = self._resolve_output_path()
+        store_cfg = self.config.get("store", {})
+        self.store_enabled = bool(store_cfg.get("enabled", False))
+        self.xlsx_from_store = self.store_enabled and bool(store_cfg.get("xlsx_from_store", False))
+        self.full_start_date = self.start_date
 
         # Screening pulls only what is held today, so it does not need full
         # history: default to a rolling window unless the caller overrode dates.
@@ -126,6 +147,8 @@ class ATLASBloombergLoader:
         # Benchmark (optional, per-universe)
         benchmarks = self.config.get("benchmarks", {})
         self.benchmark = benchmarks.get(self.universe)
+        if self.benchmark is None and self._registry_entry is not None:
+            self.benchmark = self._registry_entry.benchmark
 
         self._manifest = manifests.RunManifest(
             universe=self.universe,
@@ -133,12 +156,25 @@ class ATLASBloombergLoader:
             mode=self.mode,
             daily=self.daily,
             n_requested=len(self.tickers),
+            registry_rev=getattr(self._registry_entry, "rev", None),
+            ticker_source="registry" if self._tickers_from_registry else "csv",
         )
 
         # Daily incremental mode: load existing data and override date range
         self._existing_data: dict[str, pd.DataFrame] = {}
         self._existing_benchmark: pd.DataFrame | None = None
-        if self.daily:
+        if self.daily and self.xlsx_from_store:
+            # The store holds per-ticker watermarks: no need to read the workbook back.
+            wm = self._watermarks().get("price", {})
+            if not wm:
+                raise ValueError(
+                    f"Daily mode: store for '{self.store_universe}' has no price data. "
+                    f"Run a full extraction or 'python -m dl.migrate import-xlsx' first."
+                )
+            self.start_date = max(wm.values())
+            self.end_date = dt.date.today().isoformat()
+            logger.info(f"Daily mode (store): fetching {self.start_date} -> {self.end_date}")
+        elif self.daily:
             self._existing_data, self._existing_benchmark = self._load_existing_xlsx()
             if "price" in self._existing_data and not self._existing_data["price"].empty:
                 last_date = self._existing_data["price"].index.max()
@@ -221,6 +257,7 @@ class ATLASBloombergLoader:
         if self.mode != "static":
             token_map = self.config.get("option_modes", {}).get("output_universe", {})
             universe_token = token_map.get(self.mode, f"{self.universe}_{self.mode}")
+        self.store_universe = universe_token  # one store per output file family
 
         base_path = self.config["paths"]["output_xlsx"].format(universe=universe_token)
         if self.agents and self.agents != "default":
@@ -234,6 +271,31 @@ class ATLASBloombergLoader:
         base_csv = os.path.join(loader_dir, "tickers", f"{self.universe}.csv")
 
         if self.mode == "static":
+            reg = self._registry_entry
+            if reg is not None:
+                if not reg.fetch_enabled:
+                    raise ValueError(
+                        f"Bloomberg fetch is disabled for universe '{self.universe}' "
+                        f"in the registry (rev {reg.rev}). Re-enable it in the dashboard."
+                    )
+                tickers = reg.fetch_tickers()
+                if not tickers:
+                    raise ValueError(f"Registry universe '{self.universe}' has no ticker to fetch")
+                n_dep = len(set(tickers) & set(reg.deprecated_tickers()))
+                logger.info(
+                    f"Universe from registry rev {reg.rev}: {len(tickers)} tickers "
+                    f"({n_dep} deprecated still fetched, "
+                    f"{len(reg.members) - len(tickers)} with fetch disabled)"
+                )
+                self._tickers_from_registry = True
+                # The legacy xlsx is the tradable universe of the ATLAS strategies:
+                # deprecated names go to the store only, never to the workbook.
+                self._xlsx_exclude = set(reg.deprecated_tickers())
+                return tickers
+            logger.warning(
+                f"Universe '{self.universe}' not in the share registry; "
+                f"falling back to tickers/{self.universe}.csv"
+            )
             return self._load_tickers(self.universe)
 
         if not self.universe.startswith("option"):
@@ -250,6 +312,17 @@ class ATLASBloombergLoader:
             since=self.config.get("option_modes", {}).get("bt_since"),
             refresh=self.refresh_universe,
         )
+
+    def _load_registry_entry(self):
+        """Registry on the share is re-read at every run (source of truth)."""
+        self._tickers_from_registry = False
+        self._xlsx_exclude: set[str] = set()
+        try:
+            if registry.exists(self.universe, self.config):
+                return registry.load(self.universe, self.config)
+        except (OSError, ValueError) as e:
+            logger.warning(f"Could not read registry for '{self.universe}': {e}")
+        return None
 
     @staticmethod
     def _load_tickers(universe: str) -> list[str]:
@@ -315,18 +388,49 @@ class ATLASBloombergLoader:
     # ------------------------------------------------------------------
     # Bloomberg extraction (3-tier error handling)
     # ------------------------------------------------------------------
-    def _extract_field(self, bbg_field: str) -> pd.DataFrame:
-        """Pull a single Bloomberg field for the full ticker universe.
+    def _watermarks(self) -> dict:
+        return store_writer.load_state(self.store_universe, self.config, self.test).get("watermarks", {})
+
+    def _fetch_groups(self, alias: str) -> list[tuple[list[str], str]]:
+        """[(tickers, start_date)]. With the store, a ticker never seen for this field
+        (index joiner, new field) is backfilled from the full start date instead of
+        only from today -- the legacy --daily gave joiners no history."""
+        if not self.store_enabled or self.dry_run:
+            return [(self.tickers, self.start_date)]
+        wm = self._watermarks().get(alias, {})
+        new = [t for t in self.tickers if t not in wm]
+        known = [t for t in self.tickers if t in wm]
+        if not wm or self.start_date <= self.full_start_date:
+            return [(self.tickers, self.start_date)]
+        groups = []
+        if known:
+            groups.append((known, self.start_date))
+        if new:
+            logger.info(f"  {len(new)} ticker(s) without history for '{alias}': backfill from {self.full_start_date}")
+            groups.append((new, self.full_start_date))
+        return groups
+
+    def _extract_alias(self, alias: str, bbg_field: str) -> pd.DataFrame:
+        frames = [self._extract_field(bbg_field, tickers, start) for tickers, start in self._fetch_groups(alias)]
+        frames = [f for f in frames if not f.empty]
+        if not frames:
+            return pd.DataFrame()
+        return pd.concat(frames, axis=1).sort_index() if len(frames) > 1 else frames[0]
+
+    def _extract_field(self, bbg_field: str, tickers: list[str] | None = None,
+                       start_date: str | None = None) -> pd.DataFrame:
+        """Pull a single Bloomberg field for a ticker group (default: the full universe).
 
         Returns a DataFrame with DatetimeIndex rows and raw-ticker columns.
         """
+        start_date = start_date or self.start_date
         # Build Bloomberg tickers (append suffix)
-        bbg_tickers = [t + self.ticker_suffix for t in self.tickers]
+        bbg_tickers = [t + self.ticker_suffix for t in (self.tickers if tickers is None else tickers)]
 
         if self.dry_run:
             logger.info(
                 f"[DRY RUN] Would extract field {bbg_field} for {len(bbg_tickers)} tickers "
-                f"({self.start_date} -> {self.end_date})"
+                f"({start_date} -> {self.end_date})"
             )
             for t in bbg_tickers[:10]:
                 logger.info(f"  - {t}")
@@ -349,7 +453,7 @@ class ATLASBloombergLoader:
                 df = self.blp.bdh(
                     tickers=batch,
                     flds=[bbg_field],
-                    start_date=self.start_date,
+                    start_date=start_date,
                     end_date=self.end_date,
                     **self.bdh_options,
                 )
@@ -365,7 +469,7 @@ class ATLASBloombergLoader:
                         single = self.blp.bdh(
                             tickers=[ticker],
                             flds=[bbg_field],
-                            start_date=self.start_date,
+                            start_date=start_date,
                             end_date=self.end_date,
                             **self.bdh_options,
                         )
@@ -384,6 +488,7 @@ class ATLASBloombergLoader:
             batches=n_batches,
             fallback_batches=fallback_batches,
         )
+        previous = self._field_reports.get(bbg_field)  # another fetch group of the same field
         self._field_reports[bbg_field] = report
 
         if not all_results:
@@ -404,6 +509,13 @@ class ATLASBloombergLoader:
         report.n_returned = len(returned)
         report.missing = sorted(set(bbg_tickers) - returned - set(failed_tickers))
         report.seconds = round(time.monotonic() - t0, 2)
+        if previous is not None:
+            report.n_returned += previous.n_returned
+            report.failed = sorted(set(report.failed) | set(previous.failed))
+            report.missing = sorted(set(report.missing) | set(previous.missing))
+            report.seconds = round(report.seconds + previous.seconds, 2)
+            report.batches += previous.batches
+            report.fallback_batches += previous.fallback_batches
         if report.missing:
             logger.warning(
                 f"  {len(report.missing)} tickers requested but absent from the "
@@ -468,6 +580,88 @@ class ATLASBloombergLoader:
         if series:
             return pd.DataFrame(series)
         return pd.DataFrame()
+
+    # ------------------------------------------------------------------
+    # Store: refdata, FX, derived layers
+    # ------------------------------------------------------------------
+    def _update_store_layers(self, benchmark: pd.DataFrame) -> None:
+        """Benchmark, reference data, FX rates then fx_eur/clean. A failure here must not
+        lose the raw data already written: it is reported in the manifest instead."""
+        u, cfg, test = self.store_universe, self.config, self.test
+        try:
+            for col in (benchmark.columns if benchmark is not None else []):
+                store_writer.upsert_long(u, store_layout.BENCHMARK, col,
+                                         benchmark[[col]].rename(columns={col: "benchmark"}),
+                                         config=cfg, test=test)
+            self._update_refdata()
+            self._update_fx()
+            since = None if not self.daily else int(str(self.start_date)[:4])
+            rep = store_derive.derive(u, cfg, test, since_year=since, registry_universe=self.universe)
+            self._manifest.fx_missing = rep.get("fx_missing", [])
+            self._manifest.clean_version = rep.get("clean_version")
+            self._manifest.provisional_date = str(self.end_date)
+        except Exception as e:
+            logger.error(f"Store layers update failed: {e}")
+            logger.error(traceback.format_exc())
+            self._manifest.error = f"store layers: {type(e).__name__}: {e}"
+
+    def _store_raw(self, alias: str, df: pd.DataFrame) -> None:
+        """A store failure must never cost the legacy xlsx its data."""
+        if not self.store_enabled or self.dry_run or df.empty:
+            return
+        try:
+            store_writer.upsert_long(self.store_universe, "raw", alias, df, config=self.config, test=self.test)
+            store_writer.update_state(self.store_universe, alias, df, self.config, self.test)
+        except Exception as e:
+            if self.xlsx_from_store:
+                raise
+            logger.error(f"Store write failed for '{alias}': {e}")
+            self._manifest.error = f"store raw '{alias}': {type(e).__name__}: {e}"
+
+    def _update_refdata(self) -> None:
+        known = set(store_reader.read_refdata(self.store_universe, self.config, self.test).index)
+        todo = [t for t in self.tickers if t not in known]
+        if not todo:
+            return
+        try:
+            raw = self.blp.bdp([t + self.ticker_suffix for t in todo],
+                               ["CRNCY", "NAME", "GICS_SECTOR_NAME"])
+        except Exception as e:
+            logger.warning(f"Reference data (BDP) failed, FX falls back to the exchange map: {e}")
+            return
+        if raw is None or raw.empty:
+            return
+        raw.columns = [str(c).lower() for c in raw.columns]
+        df = pd.DataFrame({
+            "currency": raw.get("crncy"), "name": raw.get("name"), "sector": raw.get("gics_sector_name"),
+        })
+        df.index = [str(i).replace(self.ticker_suffix, "") if self.ticker_suffix else str(i) for i in raw.index]
+        store_writer.write_refdata(self.store_universe, df, self.config, self.test)
+
+    def _update_fx(self) -> None:
+        overrides = self.config.get("universe_overrides", {}).get(self.universe, {})
+        if not overrides.get("fx_layer", True):
+            return
+        from dl import paths as dl_paths
+
+        refdata = store_reader.read_refdata(self.store_universe, self.config, self.test)
+        ccys = store_fx.required_currencies(self.tickers, refdata)
+        if not ccys:
+            return
+        have = set(store_reader.read_fx(config=self.config, test=self.test).columns)
+        for group, start in (([c for c in ccys if c in have], self.start_date),
+                             ([c for c in ccys if c not in have], self.full_start_date)):
+            if not group:
+                continue
+            logger.info(f"FX: {', '.join(group)} from {start}")
+            df = self.blp.bdh(tickers=[store_fx.fx_ticker(c) for c in group], flds=["PX_LAST"],
+                              start_date=start, end_date=self.end_date, **self.bdh_options)
+            if df.empty:
+                continue
+            if isinstance(df.columns, pd.MultiIndex):
+                df = df.droplevel(1, axis=1)
+            df.columns = [str(c)[3:6] for c in df.columns]   # 'EURUSD Curncy' -> 'USD'
+            store_writer.upsert_dir(dl_paths.fx_dir(self.config, self.test), df)
 
     # ------------------------------------------------------------------
     # Excel output
@@ -539,7 +733,7 @@ class ATLASBloombergLoader:
             for alias, f in self.fields.items()
             if f in self._field_reports
         }
-        m.finish(error)
+        m.finish(error or m.error)
         try:
             path = manifests.write(m, self.config)
             logger.info(f"Run manifest ({m.status}): {path}")
@@ -560,14 +754,20 @@ class ATLASBloombergLoader:
 
         if self.dry_run:
             logger.info("=== DRY RUN — no Bloomberg API calls will be made ===")
+        else:
+            # Requests queued by the dashboard (index refresh, new index universe...)
+            self._manifest.requests_processed = requests_worker.process_pending(self.blp, self.config)
 
         results: dict[str, pd.DataFrame] = {}
 
         for sheet_name, bbg_field in self.fields.items():
             logger.info(f"Extracting field: {bbg_field} -> sheet '{sheet_name}'")
             try:
-                df = self._extract_field(bbg_field)
+                df = self._extract_alias(sheet_name, bbg_field)
                 results[sheet_name] = df
+                self._store_raw(sheet_name, df)
+                if self._xlsx_exclude and not df.empty:
+                    results[sheet_name] = df.drop(columns=[c for c in df.columns if c in self._xlsx_exclude])
             except Exception as e:
                 logger.error(f"Field-level failure for {bbg_field}: {e}")
                 logger.error(traceback.format_exc())
@@ -611,6 +811,7 @@ class ATLASBloombergLoader:
         if self.benchmark:
             logger.info(f"Extracting benchmark: {self.benchmark}")
             benchmark_df = self._extract_benchmark()
+        new_benchmark = benchmark_df
 
         # Daily mode: merge benchmark
         if self.daily and self._existing_benchmark is not None and not self._existing_benchmark.empty:
@@ -631,9 +832,21 @@ class ATLASBloombergLoader:
             logger.info("[DRY RUN] Skipping xlsx write")
             return
 
-        # Only write if we got at least some data
         has_data = any(not df.empty for df in results.values())
-        if has_data:
+        if self.store_enabled and has_data:
+            self._update_store_layers(new_benchmark)
+
+        # Only write if we got at least some data
+        if has_data and self.xlsx_from_store:
+            t0 = time.monotonic()
+            info = legacy_xlsx.export(self.store_universe, self.output_path, list(self.fields),
+                                      self.config["parameters"],
+                                      tickers=[t for t in self.tickers if t not in self._xlsx_exclude],
+                                      only_listed=bool(self._xlsx_exclude),
+                                      config=self.config, test=self.test)
+            self._manifest.xlsx = {**info, "seconds": round(time.monotonic() - t0, 2), "source": "store"}
+            logger.info(f"Output written from store: {self.output_path}")
+        elif has_data:
             self._write_xlsx(results, benchmark=benchmark_df)
         else:
             logger.error("No data extracted for any field — output file not written")
@@ -738,6 +951,12 @@ def main():
              "unattended runs).",
     )
     parser.add_argument(
+        "--process-requests",
+        action="store_true",
+        help="Only process the dashboard request queue on the share (index "
+             "membership refreshes, new index universes), then exit.",
+    )
+    parser.add_argument(
         "--log-level",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         default="INFO",
@@ -746,6 +965,12 @@ def main():
     args = parser.parse_args()
 
     logger.setLevel(getattr(logging, args.log_level))
+
+    if args.process_requests:
+        cfg = ATLASBloombergLoader._load_config(args.config)
+        done = requests_worker.process_pending(_default_blp(), cfg)
+        logger.info(f"{len(done)} request(s) processed: {', '.join(done) or '-'}")
+        return
 
     # --update-universe: refresh the ticker CSV from live index membership,
     # then exit. Handled before building the loader so it never loads the
@@ -775,6 +1000,17 @@ def main():
             dry_run=args.dry_run,
             assume_yes=args.yes,
         )
+        # The registry is the source of truth and is only written by the dashboard:
+        # hand it the same membership as a finished request, to be applied there.
+        if not args.dry_run and registry.exists(universe, cfg):
+            from dl import requests_queue
+
+            req = requests_queue.submit("index_members", universe, {"index": index}, "cli", cfg)
+            requests_queue.claim(req["id"], cfg)
+            requests_queue.complete(
+                req["id"], requests_worker.run_index_members(universe, index, _default_blp(), cfg), cfg
+            )
+            logger.info(f"Registry diff queued for the dashboard: request {req['id']}")
         return
 
     if args.daily and args.start_date:

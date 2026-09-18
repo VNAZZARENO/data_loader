@@ -136,6 +136,41 @@ position file.
 Settings live under `option_modes:` in `config/atlas_config.yaml` (`fund`,
 `api_base_url`, `bt_since`, `screening_months`, `output_universe`).
 
+## Registre d'univers, store et dashboard
+
+Trois briques partagent des fichiers sous `<partage>/univers/` (`X:\Quant\Data` ≡
+`/mnt/srvPergam_docs/Quant/Data` ; la variable `DL_SHARE_ROOT` prime) :
+
+| Dossier | Écrit par | Contenu |
+|---|---|---|
+| `registry/<u>.json` + `_events/` | dashboard | composition datée, deprecated, liens de renommage, journal |
+| `requests/{pending,claimed,done,failed,applied,rejected}/` | les deux | demandes `INDX_MEMBERS` |
+| `runs/<u>/` | loader | manifestes (échecs, absents, FX manquant) |
+| `store/<u>/layer=/field=/<année>.parquet` | loader | données `raw`, `fx_eur`, `clean` |
+
+```python
+from dl import store
+px = store.read("sxxr", "price", layer="clean", pit_members=True)   # NaN hors appartenance
+data = store.read("sxxr", ["price", "EPS"], start="2020-01-01")     # {champ: DataFrame}
+mask = store.membership_mask("sxxr", px.index)
+fx = store.read_fx(["USD", "GBP"])                                   # EURUSD, EURGBP
+```
+
+```bash
+python -m dl.migrate seed --all                      # CSV -> registre (idempotent)
+python -m dl.migrate backfill-leavers --universe sxxr  # sortants : xlsx, git, .bak
+python -m dl.migrate import-xlsx --universe sxxr       # xlsx historique -> store
+python -m dl.store info --universe sxxr
+python bloomberg_loader.py --process-requests        # poste Bloomberg : dépile les demandes
+bash dashboard/start_dashboard.sh                    # http://127.0.0.1:7016
+.venv/bin/python -m pytest                           # suite complète
+```
+
+Un deprecated reste extrait tant que son interrupteur « Fetch BBG » est actif ; un
+univers entier se coupe depuis sa page. Les dates d'entrée de source `seed` ou
+`first_valid` sont des hypothèses : le survivorship d'avant le premier suivi n'est
+corrigé que par une demande d'historique (`INDX_MWEIGHT_HIST`).
+
 ## Universes
 
 | Universe | Tickers | Index |

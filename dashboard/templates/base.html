@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DataLoader — {% block title %}Univers{% endblock %}</title>
+<link rel="stylesheet" href="{{ base_url }}/static/app.css">
+<script>const BASE = {{ base_url|tojson }};</script>
+<script src="{{ base_url }}/static/app.js"></script>
+{% block head %}{% endblock %}</head>
+<body>
+<header><h1>DataLoader</h1>
+<nav><a href="{{ base_url }}/" class="{{ 'on' if page in ('index','universe') }}">Univers</a>
+<a href="{{ base_url }}/new" class="{{ 'on' if page=='new' }}">Nouvel univers</a>
+<a href="{{ base_url }}/requests" class="{{ 'on' if page=='requests' }}">Requetes Bloomberg</a></nav>
+<span class="share" id="share"></span></header>
+<main>{% block main %}{% endblock %}</main><div id="toast"></div>
+<script>api("GET","/health").then(h=>{$("#share").textContent=(h.share_ok?"Partage : ":"PARTAGE INACCESSIBLE : ")+h.share_root;if(!h.share_ok)$("#share").style.color="#d03b3b"}).catch(()=>{});</script>
+{% block script %}{% endblock %}
+</body></html>

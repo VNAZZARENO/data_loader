@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% block title %}Requetes{% endblock %}
+{% block main %}
+<h2>Requetes Bloomberg</h2><p class="sub">Deposees ici, executees par le loader sur le poste Bloomberg a son prochain lancement (ou <code>--process-requests</code>), puis appliquees au registre depuis cette page.</p>
+<div class="card scroll"><table id="t"><thead><tr><th>Date</th><th>Univers</th><th>Type</th><th>Statut</th><th>Resultat</th><th></th></tr></thead><tbody></tbody></table></div>
+{% endblock %}
+{% block script %}<script>
+const ST = {pending: ["warn", "en attente"], claimed: ["warn", "en cours"], done: ["serious", "a valider"], failed: ["crit", "echec"], applied: ["good", "appliquee"], rejected: ["off", "rejetee"]};
+function detail(r) {
+  if (r.status === "failed") return `<span class="minus">${esc(r.error)}</span>`;
+  const p = r.preview; if (!p) return esc(r.note || "");
+  if (p.error) return `<span class="minus">${esc(p.error)}</span>`;
+  if (p.dates) return `${p.dates.length} compositions, ${p.n_tickers} tickers`;
+  return `${p.n_old} → ${p.n_new} · <span class="plus">+${p.joiners.length}</span> <span class="muted">${esc(p.joiners.slice(0, 8).join(", "))}${p.joiners.length > 8 ? "…" : ""}</span>
+   · <span class="minus">−${p.leavers.length}</span> <span class="muted">${esc(p.leavers.slice(0, 8).join(", "))}${p.leavers.length > 8 ? "…" : ""}</span>
+   ${p.unmapped_exchanges.length ? ` · places inconnues : ${esc(p.unmapped_exchanges.join(", "))}` : ""}${p.guardrail ? " · <b class='minus'>garde-fou 50 %</b>" : ""}`;
+}
+function load() { api("GET", "/requests").then(rs => {
+  $("#t tbody").innerHTML = rs.map(r => `<tr><td>${esc(r.created_at.slice(0, 16).replace("T", " "))}</td>
+   <td><a href="${BASE}/u/${r.universe}">${esc(r.universe)}</a></td><td>${esc(r.type)} <span class="muted">${esc(r.params.index || "")}</span></td>
+   <td>${badge(...ST[r.status])}</td><td style="white-space:normal">${detail(r)}</td><td>
+   ${r.status === "done" ? `<button class="sm primary" onclick="act('${r.id}','apply',${!!(r.preview && r.preview.guardrail)})">${r.preview && r.preview.guardrail ? "Forcer malgre le garde-fou" : "Appliquer"}</button> <button class="sm" onclick="act('${r.id}','reject')">Rejeter</button>` : ""}
+   ${r.status === "pending" ? `<button class="sm" onclick="cancel('${r.id}')">Annuler</button>` : ""}</td></tr>`).join("")
+   || `<tr><td colspan="6" class="muted">Aucune requete.</td></tr>`; }).catch(fail); }
+function act(id, what, guard) { api("POST", `/requests/${id}/${what}`, {force: !!guard}).then(() => { toast(what === "apply" ? "Composition appliquee" : "Requete rejetee"); load(); }).catch(e => { fail(e); load(); }); }
+function cancel(id) { api("DELETE", `/requests/${id}`).then(load).catch(fail); }
+load();
+</script>{% endblock %}

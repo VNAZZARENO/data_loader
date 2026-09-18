@@ -5,6 +5,19 @@ parameters:
 paths:
   source_xlsx: X:\Quant\Data\ATLAS_data.xlsx
   output_xlsx: X:\Quant\Data\ATLAS_data_{universe}_static.xlsx
+  # Racine du partage : registre d'univers, file de requetes, manifestes et store parquet
+  # vivent sous <share_root>/univers/. La variable d'env DL_SHARE_ROOT prime.
+  share_root: X:\Quant\Data
+  share_root_posix: /mnt/srvPergam_docs/Quant/Data
+# Store parquet (univers/store/<u>/layer=<raw|fx_eur|clean>/field=<alias>/<annee>.parquet).
+#   enabled          : ecrit le store EN PLUS du xlsx (phase de parite).
+#   xlsx_from_store  : le xlsx devient un export du store ; --daily ne relit plus le classeur.
+#                      A n'activer qu'apres import-xlsx + controle de parite.
+store:
+  enabled: true
+  xlsx_from_store: false
+  # Champs monetaires convertis dans la couche fx_eur (les autres passent tels quels en clean).
+  currency_fields: [price, open, high, low, EPS, best_eps, best_sales]
 bloomberg:
   batch_size: 250
   ticker_suffix: ' Equity'
@@ -103,10 +116,12 @@ universes:
 universe_overrides:
   global_macro:
     ticker_suffix: ''
+    fx_layer: false   # actifs heterogenes : pas de couche fx_eur
     fields:
       price: PX_LAST
   euro_credit:
     ticker_suffix: ''
+    fx_layer: false
     fields:
       total_return: DAY_TO_DAY_TOT_RETURN_GROSS_DVDS
       oas: OAS_SPREAD_BID

@@ -1,0 +1,133 @@
+{% extends "base.html" %}{% block title %}{{ universe }}{% endblock %}
+{% block head %}<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>{% endblock %}
+{% block main %}
+<div class="row"><div class="grow"><h2 id="title">{{ universe }}</h2><p class="sub" id="subtitle"></p></div>
+<button id="btnRefresh">Rafraichir depuis l'indice</button><button id="btnFetch"></button></div>
+<div class="tiles" id="tiles"></div>
+<div class="tabs" id="tabs"><button data-tab="overview" class="on">Apercu</button><button data-tab="quality">Qualite</button>
+<button data-tab="composition">Composition</button><button data-tab="history">Historique</button><button data-tab="runs">Runs</button></div>
+
+<section id="overview">
+ <div id="nostore" class="note" hidden>Cet univers n'est pas encore dans le store parquet : pas de graphique. Importer l'historique avec <code>python -m dl.migrate import-xlsx --universe {{ universe }}</code> ou lancer une extraction.</div>
+ <div class="card"><div class="row"><h3 class="grow">Indice equal-weight quotidien (base 100)</h3>
+  <label>Couche<select id="ewLayer"><option value="clean">clean</option><option value="fx_eur">fx_eur</option><option value="raw">raw (devise locale)</option></select></label>
+  <label>Appartenance<select id="ewPit"><option value="true">point-in-time (registre)</option><option value="false">tous les tickers</option></select></label></div>
+  <div class="legend"><span><i style="background:var(--s1)"></i>Equal-weight</span><span id="lgBench" hidden><i style="background:var(--s2)"></i>Benchmark (rebase)</span></div>
+  <div id="ewNote" class="note" hidden></div>
+  <div id="ewChart" class="chart"></div>
+  <p class="muted" style="margin:6px 0 0">Moyenne des rendements journaliers des membres du jour ayant un prix a t-1 et t, cumulee. Les entrees de source <code>seed</code>/<code>first_valid</code> sont des hypotheses : le survivorship d'avant le premier suivi n'est pas corrige.</p></div>
+ <div class="card"><h3>Nombre de composants</h3>
+  <div class="legend"><span><i style="background:var(--s1)"></i>Membres (registre)</span><span><i style="background:var(--s2)"></i>Membres avec un prix</span></div>
+  <div id="countChart" class="chart short"></div></div>
+</section>
+
+<section id="quality" hidden>
+ <div class="card scroll"><div class="row"><h3 class="grow">Couverture par champ (membres actifs, 252 derniers jours)</h3>
+  <label>Couche<select id="qLayer"><option>raw</option><option>fx_eur</option><option>clean</option></select></label></div>
+  <table id="tq"><thead><tr><th data-sort>Champ</th><th data-sort>Debut</th><th data-sort>Fin</th><th class="num" data-sort>Tickers</th>
+  <th class="num" data-sort>Actifs couverts</th><th class="num" data-sort>Couverture %</th><th class="num" data-sort>NaN derniere date %</th><th>Actifs absents</th></tr></thead><tbody></tbody></table></div>
+ <div class="card scroll"><h3>Tickers a regarder</h3><table id="tflags"><thead><tr><th data-sort>Ticker</th><th data-sort>Statut</th><th>Signalements</th>
+  <th data-sort>1re valeur</th><th data-sort>Derniere valeur</th><th class="num" data-sort>Jours figes</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="composition" hidden>
+ <div id="candidates"></div>
+ <div class="card"><h3>Ajouter des tickers</h3><div class="row"><textarea id="addText" placeholder="Un ticker par ligne, ou separes par des virgules. Ex. : MC FP, ROG SW Equity" style="min-height:70px"></textarea></div>
+  <div class="row"><label>Date d'entree<input type="date" id="addDate"></label><button id="btnPreview">Apercu</button><button id="btnAdd" class="primary">Ajouter</button><span id="addInfo" class="muted"></span></div></div>
+ <div class="card scroll"><div class="row"><input id="filter" placeholder="Filtrer…" class="grow">
+  <label>Statut<select id="fStatus"><option value="">tous</option><option value="active">actifs</option><option value="deprecated">deprecated</option></select></label></div>
+  <table id="tm"><thead><tr><th data-sort>Ticker</th><th data-sort>Statut</th><th data-sort>Entree</th><th data-sort>Source</th><th data-sort>Sortie</th>
+  <th data-sort>Renommage</th><th data-sort>Derniere valeur</th><th>Fetch BBG</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="history" hidden><div class="card scroll"><table id="th"><thead><tr><th>Date</th><th>Rev</th><th>Origine</th><th>Entrees</th><th>Sorties</th><th>Autres</th></tr></thead><tbody></tbody></table></div></section>
+<section id="runs" hidden><div class="card scroll"><table id="tr"><thead><tr><th>Debut</th><th>Profil</th><th>Statut</th><th>Poste</th><th>Periode</th><th class="num">Demandes</th><th>Echecs / absents</th><th>FX manquant</th><th>Erreur</th></tr></thead><tbody></tbody></table></div></section>
+{% endblock %}
+{% block script %}<script>
+const U = {{ universe|tojson }}; let META = null, MEMBERS = [];
+const put = (p, b) => api("PUT", p, {...b, rev: META.rev}), post = (p, b) => api("POST", p, {...b, rev: META.rev});
+const after = msg => () => { toast(msg); return reload(); }, oops = e => { fail(e); return reload(); };
+
+async function reload() {
+  META = await api("GET", `/universes/${U}`);
+  $("#subtitle").textContent = `${META.label} · ${META.kind}${META.source.index ? " · " + META.source.index : ""} · rev ${META.rev}`;
+  $("#btnRefresh").hidden = !META.source.index;
+  $("#btnFetch").textContent = META.fetch_enabled ? "Couper le fetch Bloomberg" : "Reactiver le fetch Bloomberg";
+  $("#tiles").innerHTML = [["Actifs", META.n_active, ""], ["Deprecated", META.n_deprecated, "toujours extraits"], ["Fetch coupe", META.n_fetch_off, "tickers"],
+    ["Composition", fmtDate(META.composition_updated_at), ageBadge(META.composition_age_bd, 65, 130)], ["Derniere donnee", fmtDate(META.data_date), ageBadge(META.data_age_bd, 1, 3)],
+    ["Dernier run", META.last_run ? fmtDate(META.last_run.started_at) : "—", runBadge(META.last_run)]]
+    .map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join("");
+  $("#nostore").hidden = META.in_store; $$("#overview .card").forEach(c => c.hidden = !META.in_store);
+  $("#candidates").innerHTML = META.rename_candidates.length ? `<div class="note"><b>Renommages possibles</b> (meme constituant, deux tickers) — a confirmer :<br>` +
+    META.rename_candidates.map(c => `${esc(c.from)} → ${esc(c.to)} <span class="muted">${esc(c.reason)}</span> <button class="sm" onclick="linkRename('${esc(c.from)}','${esc(c.to)}')">Lier</button>`).join("<br>") + `</div>` : "";
+  MEMBERS = await api("GET", `/universes/${U}/members`); renderMembers(); renderFlags();
+}
+function renderMembers() {
+  const q = $("#filter").value.toUpperCase(), st = $("#fStatus").value;
+  $("#tm tbody").innerHTML = MEMBERS.filter(m => (!q || m.ticker.includes(q)) && (!st || m.status === st)).map(m => { const t = esc(m.ticker); return `<tr>
+   <td><b>${t}</b>${m.note ? ` <span class="muted" title="${esc(m.note)}">✎</span>` : ""}</td><td>${badge(m.status === "active" ? "good" : "off", m.status === "active" ? "actif" : "deprecated")}</td>
+   <td>${m.entry || "<span class='muted'>inconnue</span>"}</td><td class="muted">${esc(m.entry_source || "")}${m.n_periods > 1 ? ` · ${m.n_periods} periodes` : ""}</td><td>${m.exit || ""} <span class="muted">${esc(m.exit_source || "")}</span></td>
+   <td>${m.successor ? `→ ${esc(m.successor)} <button class="sm" onclick="unlink('${t}')">×</button>` : m.predecessor ? `← ${esc(m.predecessor)}` : ""}</td><td>${m.last_valid || "<span class='muted'>—</span>"}</td>
+   <td><input type="checkbox" ${m.fetch ? "checked" : ""} onchange="put('/universes/${U}/members/${encodeURIComponent(m.ticker)}/fetch',{enabled:this.checked}).then(after('Fetch mis a jour')).catch(oops)"></td>
+   <td>${m.status === "active" ? `<button class="sm" onclick="deprecate('${t}')">Deprecier</button>` : `<button class="sm" onclick="reactivate('${t}')">Reactiver</button> <button class="sm" onclick="askRename('${t}')">Lier a…</button>`}
+    <button class="sm danger" onclick="removeMember('${t}')">Supprimer</button></td></tr>`; }).join("");
+  sortable($("#tm"));
+}
+function renderFlags() {
+  const L = {sans_donnees: ["crit", "sans donnees"], en_retard: ["warn", "en retard"], fige: ["serious", "prix fige"], echec_fetch: ["crit", "echec fetch"], absent_reponse: ["warn", "absent de la reponse"]};
+  $("#tflags tbody").innerHTML = MEMBERS.filter(m => m.flags.length).map(m => `<tr><td><b>${esc(m.ticker)}</b></td><td>${esc(m.status)}</td><td>${m.flags.map(f => badge(...L[f])).join(" ")}</td>
+   <td>${m.first_valid || "—"}</td><td>${m.last_valid || "—"}</td><td class="num">${m.flat_tail}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Rien a signaler.</td></tr>`;
+  sortable($("#tflags"));
+}
+const today = () => new Date().toISOString().slice(0, 10);
+function askDate(msg) { const d = window.prompt(msg, today()); return d === null ? null : d; }
+function deprecate(t) { const d = askDate(`Date de sortie de ${t} (le ticker reste extrait) :`); if (d) post(`/universes/${U}/members/${encodeURIComponent(t)}/deprecate`, {date: d}).then(after(`${t} deprecated`)).catch(oops); }
+function reactivate(t) { const d = askDate(`Date de re-entree de ${t} :`); if (d) post(`/universes/${U}/members/${encodeURIComponent(t)}/reactivate`, {date: d}).then(after(`${t} reactive`)).catch(oops); }
+function removeMember(t) { if (window.confirm(`Supprimer definitivement ${t} du registre ? (pour une faute de frappe ; un vrai sortant se deprecie)`)) api("DELETE", `/universes/${U}/members/${encodeURIComponent(t)}?rev=${META.rev}`).then(after(`${t} supprime`)).catch(oops); }
+function linkRename(a, b) { post(`/universes/${U}/renames`, {from: a, to: b}).then(after(`${a} → ${b} lies`)).catch(oops); }
+function askRename(t) { const to = window.prompt(`Ticker successeur de ${t} (meme constituant) :`); if (to) linkRename(t, to.trim().toUpperCase()); }
+function unlink(t) { api("DELETE", `/universes/${U}/renames/${encodeURIComponent(t)}?rev=${META.rev}`).then(after("Lien supprime")).catch(oops); }
+
+async function charts() {
+  if (!META.in_store) return;
+  const ew = await api("GET", `/universes/${U}/ew_index?layer=${$("#ewLayer").value}&pit=${$("#ewPit").value}`);
+  const tr = [{x: ew.dates, y: ew.ew, name: "Equal-weight", color: PLOT.s1}];
+  if (ew.benchmark) tr.push({x: ew.dates, y: ew.benchmark, name: "Benchmark", color: PLOT.s2});
+  const notes = [];
+  if (ew.layer_used !== $("#ewLayer").value) notes.push(`Couche « ${$("#ewLayer").value} » vide (taux FX pas encore extraits sur le poste Bloomberg) : indice calcule sur « ${ew.layer_used} », en devise locale.`);
+  if (ew.n_members_last && ew.n_priced_last < 0.9 * ew.n_members_last) notes.push(`Seuls ${ew.n_priced_last} des ${ew.n_members_last} membres ont un prix dans la couche « ${ew.layer_used} » a la derniere date : les titres sans taux de change sont absents (conversion EUR fail-closed). Choisir « raw » pour l'univers complet en devise locale.`);
+  $("#ewNote").hidden = !notes.length; $("#ewNote").textContent = notes.join(" ");
+  $("#lgBench").hidden = !ew.benchmark; lineChart("ewChart", tr, "base 100");
+  const c = await api("GET", `/universes/${U}/count_series`);
+  lineChart("countChart", [{x: c.dates, y: c.members, name: "Membres (registre)", color: PLOT.s1, step: true, digits: 0},
+                           {x: c.dates, y: c.with_price, name: "Avec un prix", color: PLOT.s2, step: true, digits: 0}], "tickers");
+}
+async function qualityTab() { const rows = await api("GET", `/universes/${U}/quality?layer=${$("#qLayer").value}`);
+  $("#tq tbody").innerHTML = rows.map(r => `<tr><td><b>${esc(r.field)}</b></td><td>${r.first_date}</td><td>${r.last_date}</td><td class="num">${r.n_tickers}</td>
+   <td class="num">${r.n_active_with_data} / ${r.n_active}</td><td class="num">${r.coverage_pct.toFixed(1)}</td><td class="num">${r.nan_last_pct.toFixed(1)}</td>
+   <td style="white-space:normal" class="muted">${esc(r.missing_active.join(", "))}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Aucune donnee dans cette couche.</td></tr>`; sortable($("#tq")); }
+async function historyTab() { const cs = await api("GET", `/universes/${U}/events`);
+  const pick = (c, ops) => c.ops.filter(o => ops.includes(o.op)).map(o => o.ticker);
+  const cell = (a, cls) => a.length ? `<span class="${cls}">${a.length}</span> <span class="muted">${esc(a.slice(0, 12).join(", "))}${a.length > 12 ? "…" : ""}</span>` : "";
+  $("#th tbody").innerHTML = cs.map(c => { const other = c.ops.filter(o => !["add", "reactivate", "deprecate"].includes(o.op));
+   return `<tr><td>${esc(c.ts.slice(0, 16).replace("T", " "))}</td><td>${c.rev_to}</td><td>${esc(c.source)} <span class="muted">${esc(c.actor)}</span></td>
+   <td style="white-space:normal">${cell(pick(c, ["add", "reactivate"]), "plus")}</td><td style="white-space:normal">${cell(pick(c, ["deprecate"]), "minus")}</td>
+   <td class="muted" style="white-space:normal">${esc(other.slice(0, 6).map(o => o.op + (o.ticker ? " " + o.ticker : o.from ? ` ${o.from}→${o.to}` : "")).join(", "))}${other.length > 6 ? ` … (${other.length})` : ""}</td></tr>`; }).join(""); }
+async function runsTab() { const rs = await api("GET", `/universes/${U}/runs`);
+  $("#tr tbody").innerHTML = rs.map(r => { const bad = Object.entries(r.per_field || {}).map(([k, v]) => [k, (v.failed || []).length + (v.missing || []).length]).filter(x => x[1]);
+   return `<tr><td>${esc((r.started_at || "").slice(0, 16).replace("T", " "))}</td><td>${esc(r.profile)}${r.daily ? " · daily" : ""}</td><td>${runBadge(r)}</td><td>${esc(r.host)}</td>
+   <td>${esc((r.date_range || []).join(" → "))}</td><td class="num">${r.n_requested}</td><td>${bad.map(([k, n]) => `${esc(k)}: ${n}`).join(", ")}</td>
+   <td>${(r.fx_missing || []).length || ""}</td><td class="minus" style="white-space:normal">${esc(r.error || "")}</td></tr>`; }).join("") || `<tr><td colspan="9" class="muted">Aucun run enregistre.</td></tr>`; }
+
+const LOADERS = {overview: charts, quality: qualityTab, history: historyTab, runs: runsTab, composition: async () => {}};
+$$("#tabs button").forEach(b => b.onclick = () => { $$("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+  $$("main section").forEach(s => s.hidden = s.id !== b.dataset.tab); LOADERS[b.dataset.tab]().catch(fail); });
+$("#filter").oninput = $("#fStatus").onchange = renderMembers;
+$("#ewLayer").onchange = $("#ewPit").onchange = () => charts().catch(fail); $("#qLayer").onchange = () => qualityTab().catch(fail);
+$("#btnFetch").onclick = () => put(`/universes/${U}/fetch`, {enabled: !META.fetch_enabled}).then(after("Fetch Bloomberg mis a jour")).catch(oops);
+$("#btnRefresh").onclick = () => api("POST", `/universes/${U}/refresh_index`, {}).then(() => toast("Demande deposee : executee au prochain passage du loader")).catch(fail);
+$("#btnPreview").onclick = () => api("POST", `/universes/${U}/members?dry_run=1`, {text: $("#addText").value}).then(r =>
+  $("#addInfo").textContent = `${r.tickers.length} ticker(s) : ${r.tickers.join(", ")}` + (r.already_active.length ? ` · deja actifs : ${r.already_active.join(", ")}` : "") + (r.unknown_exchanges.length ? ` · places inconnues : ${r.unknown_exchanges.join(", ")}` : "")).catch(fail);
+$("#btnAdd").onclick = () => post(`/universes/${U}/members`, {text: $("#addText").value, date: $("#addDate").value || null}).then(r => { $("#addText").value = ""; toast(`${r.ops.length} ticker(s) ajoute(s)`); return reload(); }).catch(oops);
+reload().then(charts).catch(fail);
+</script>{% endblock %}

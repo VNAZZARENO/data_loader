@@ -9,3 +9,4 @@ PyYAML==6.0.3
 six==1.17.0
 tqdm==4.67.3
 xbbg==0.11.0
+# dashboard (Linux) et tests : pip install -e .[dashboard,dev]

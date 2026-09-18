@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-09-18
+
+### Added
+- **Registre d'univers** (`dl/registry/`) sur le partage
+  (`X:\Quant\Data\univers\registry\<univers>.json`), source de vérité relue par le
+  loader **à chaque lancement** ; `tickers/<univers>.csv` n'est plus qu'un repli.
+  Chaque ticker porte ses périodes datées (entrée/sortie + source de la date). Un
+  sortant (« deprecated ») reste au registre **et continue d'être extrait** : le
+  store expose un masque point-in-time. Interrupteur de fetch Bloomberg par ticker
+  et par univers. Renommages (`ROG SE → ROP SE`) liés à la main, jamais devinés.
+  Un univers créé dans le dashboard est extractible sans toucher au YAML.
+- **Store parquet** (`dl/store/`) : `univers/store/<u>/layer=<raw|fx_eur|clean>/field=<alias>/<année>.parquet`.
+  Le daily ne réécrit que l'année courante de chaque champ. `fx_eur` : taux
+  Bloomberg `EUR{CCY} Curncy` (close du jour), pence/GBp gérés, **fail-closed**
+  (taux manquant → NaN). `clean` : fériés forward-fillés retirés (même règle que
+  ATLAS `drop_ffilled_holidays`) et queue figée des titres morts masquée.
+  API de lecture : `dl.store.read(universe, fields, layer, pit_members=...)`.
+  `python -m dl.store compact` produit un parquet mono-fichier à la demande.
+- **Dashboard** (`dashboard/`, FastAPI, port 7016, `/DataLoader/` sur pergam-tools,
+  aucune authentification) : fraîcheur, qualité par champ et par ticker, nombre de
+  composants, indice equal-weight quotidien point-in-time, gestion de la
+  composition, historique des entrées/sorties, runs, création d'univers
+  (liste collée, indice Bloomberg, combinaison, clone, filtre).
+- **File de requêtes** par fichiers (`univers/requests/`) : le dashboard demande un
+  `INDX_MEMBERS`, le loader l'exécute à son prochain run (ou `--process-requests`),
+  le dashboard applique le diff (garde-fou 50 % conservé). Le loader n'écrit jamais
+  le registre.
+- **Manifeste de run** (`univers/runs/<u>/`) : tickers en échec **et** tickers
+  demandés mais absents de la réponse, par champ.
+- `python -m dl.migrate {seed, backfill-leavers, import-xlsx}` ; suite pytest
+  (`tests/`, faux `blp`) ; `pyproject.toml`.
+
+### Changed
+- Le xlsx est écrit dans un fichier temporaire puis renommé : le cron ATLAS de
+  18:15 ne peut plus lire un classeur à moitié écrit.
+- Avec le store, un ticker sans historique pour un champ (entrant d'indice) est
+  extrait depuis `start_date`, et non plus depuis la veille comme le faisait `--daily`.
+- `xbbg` est importé à la demande (tests et dashboard hors poste Bloomberg).
+- `store.enabled: true` écrit le store **en plus** du xlsx (phase de parité).
+  `store.xlsx_from_store` reste à `false` : à activer après contrôle de parité, le
+  xlsx devient alors un export du store et `--daily` ne relit plus le classeur.
+
+**À faire sur le PC Bloomberg** : `git pull`, `pip install -e .[bbg]`, puis
+`python bloomberg_loader.py --universe sx5e --test` et vérifier
+`X:\Quant\Data\univers\store_test\`.
+
 ## 2026-08-07
 
 ### Changed
