@@ -104,15 +104,24 @@ def update_member(u: Universe, ticker: str, periods: list[dict] | None = None, n
     return u, [{"op": "update", "ticker": ticker, "periods": periods, "note": note}]
 
 
+def guardrail_hit(active: set, new: set) -> bool:
+    """Reponse effondree OU sans rapport avec l'univers (ex. l'indice de reference d'une liste
+    manuelle : LECPTREU renvoie des centaines d'obligations et sortirait les 14 instruments)."""
+    if not active:
+        return False
+    return len(new) < GUARDRAIL * len(active) or len(active - new) > GUARDRAIL * len(active)
+
+
 def apply_index_diff(u: Universe, new_tickers: list[str], date: str | None = None,
                      source: str = "index", force: bool = False):
     """Applique une composition d'indice : entrants ajoutes, sortants deprecated (jamais supprimes)."""
     date = date or _today()
     active = set(u.active_tickers())
     new = set(new_tickers)
-    if active and len(new) < GUARDRAIL * len(active) and not force:
+    if guardrail_hit(active, new) and not force:
         raise RegistryError(
-            f"Garde-fou : {len(new)} membres recus contre {len(active)} actifs (< {GUARDRAIL:.0%})"
+            f"Garde-fou : {len(new)} membres recus, {len(active - new)} des {len(active)} actifs "
+            f"sortiraient (> {GUARDRAIL:.0%}). Mauvais indice ou reponse tronquee ?"
         )
     out, ops = add(u, [t for t in new_tickers if t not in active], date, source)
     for t in sorted(active - new):

@@ -36,7 +36,9 @@ def summary(universe: str, config=None) -> dict:
     last = manifests.latest(universe, config=config)
     from .store import writer
 
-    wm = writer.load_state(universe, config).get("watermarks", {}).get("price", {})
+    # tous champs confondus : un univers sans alias "price" (euro_credit) a quand meme des donnees
+    all_wm = writer.load_state(universe, config).get("watermarks", {})
+    wm = {f"{f}:{t}": d for f, per in all_wm.items() for t, d in per.items()}
     data_date = max(wm.values()) if wm else None
     return {
         "universe": u.universe, "label": u.label, "kind": u.kind, "rev": u.rev,
@@ -48,7 +50,7 @@ def summary(universe: str, config=None) -> dict:
         "data_date": data_date, "data_age_bd": business_days_since(data_date),
         "last_run": None if last is None else {
             k: last.get(k) for k in ("run_id", "status", "profile", "started_at", "finished_at", "host", "error")},
-        "in_store": bool(wm),
+        "in_store": bool(wm), "has_price": bool(all_wm.get("price")), "store_fields": sorted(all_wm),
     }
 
 

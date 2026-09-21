@@ -15,7 +15,7 @@ def preview(req: dict, config=None) -> dict:
         return {"joiners": sorted(set(new) - active), "leavers": sorted(active - set(new)),
                 "n_old": len(active), "n_new": len(new),
                 "unmapped_exchanges": res.get("unmapped_exchanges", []),
-                "guardrail": bool(active) and len(new) < ops.GUARDRAIL * len(active)}
+                "guardrail": ops.guardrail_hit(active, set(new))}
     snaps = res.get("snapshots", {})
     return {"dates": sorted(snaps), "n_tickers": len({t for s in snaps.values() for t in s}),
             "errors": res.get("errors", {})}

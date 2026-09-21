@@ -122,3 +122,11 @@ def test_pit_mask_null_entry_reentry_and_splice():
     assert raw["ROG SE"]["2025-06-30"] and not raw["ROG SE"]["2025-07-01"]
     assert not raw["ROP SE"]["2025-06-30"] and raw["ROP SE"]["2025-07-01"]
     assert pit.count_series(u, idx).loc["2025-07-01"] == 1       # AAA dehors, ROP dedans
+
+
+def test_guardrail_also_catches_unrelated_membership():
+    u = ops.create("credit", ["GTEUR2Y Govt", "ESTR Index"], ticker_suffix="")
+    bonds = [f"BOND{i} Corp" for i in range(300)]          # plus gros, mais aucun rapport
+    with pytest.raises(RegistryError, match="Garde-fou"):
+        ops.apply_index_diff(u, bonds)
+    assert ops.apply_index_diff(u, bonds, force=True)[0].deprecated_tickers() == ["GTEUR2Y Govt", "ESTR Index"]

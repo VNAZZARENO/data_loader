@@ -57,7 +57,8 @@ async function reload() {
     ["Composition", fmtDate(META.composition_updated_at), ageBadge(META.composition_age_bd, 65, 130)], ["Derniere donnee", fmtDate(META.data_date), ageBadge(META.data_age_bd, 1, 3)],
     ["Dernier run", META.last_run ? fmtDate(META.last_run.started_at) : "—", runBadge(META.last_run)]]
     .map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join("");
-  $("#nostore").hidden = META.in_store; $$("#overview .card").forEach(c => c.hidden = !META.in_store);
+  $("#nostore").hidden = META.has_price; $$("#overview .card").forEach(c => c.hidden = !META.has_price);
+  if (META.in_store && !META.has_price) $("#nostore").textContent = `Cet univers n'a pas de champ « price » (champs du store : ${META.store_fields.join(", ")}) : pas d'indice equal-weight ni de compteur. Voir l'onglet Qualite.`;
   $("#candidates").innerHTML = META.rename_candidates.length ? `<div class="note"><b>Renommages possibles</b> (meme constituant, deux tickers) — a confirmer :<br>` +
     META.rename_candidates.map(c => `${esc(c.from)} → ${esc(c.to)} <span class="muted">${esc(c.reason)}</span> <button class="sm" onclick="linkRename('${esc(c.from)}','${esc(c.to)}')">Lier</button>`).join("<br>") + `</div>` : "";
   MEMBERS = await api("GET", `/universes/${U}/members`); renderMembers(); renderFlags();
@@ -89,7 +90,7 @@ function askRename(t) { const to = window.prompt(`Ticker successeur de ${t} (mem
 function unlink(t) { api("DELETE", `/universes/${U}/renames/${encodeURIComponent(t)}?rev=${META.rev}`).then(after("Lien supprime")).catch(oops); }
 
 async function charts() {
-  if (!META.in_store) return;
+  if (!META.has_price) return;
   const ew = await api("GET", `/universes/${U}/ew_index?layer=${$("#ewLayer").value}&pit=${$("#ewPit").value}`);
   const tr = [{x: ew.dates, y: ew.ew, name: "Equal-weight", color: PLOT.s1}];
   if (ew.benchmark) tr.push({x: ew.dates, y: ew.benchmark, name: "Benchmark", color: PLOT.s2});
