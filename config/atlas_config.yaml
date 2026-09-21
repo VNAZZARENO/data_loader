@@ -209,6 +209,8 @@ universe_overrides:
 index_members:
   # index_override:
   #   sxxr: SXXP Index   # price-return twin; identical members to SXXR
+  # Listes manuelles : leur benchmark sert aux series de rendement, PAS a la composition.
+  manual_universes: [euro_credit, pbh]
   exchange_code_map:
     SW: SE   # SIX Swiss Exchange -> project convention (e.g. ROP SW -> ROP SE)
     SM: SQ   # Bolsa de Madrid    -> project convention (e.g. SAN SM -> SAN SQ)

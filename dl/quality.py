@@ -24,8 +24,10 @@ def composition_reviewed_at(u, config=None) -> str | None:
     (seeder un CSV vieux de 7 mois ne le rend pas frais)."""
     from .registry import events
 
+    review_ops = {"add", "deprecate", "reactivate", "remove", "create", "reviewed"}
     for cs in events.list_changesets(u.universe, config=config):
-        if cs.get("source") != "migration":
+        # un changement de reglage ou un toggle de fetch n'est pas une revue de composition
+        if cs.get("source") != "migration" and any(o.get("op") in review_ops for o in cs.get("ops", [])):
             return cs["ts"]
     return u.source.get("seed_date")
 

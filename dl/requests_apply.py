@@ -35,6 +35,8 @@ def apply(req_id: str, force: bool = False, actor: str = "dashboard", config=Non
             new, o = ops.apply_index_diff(u, req["result"]["new_tickers"], source="index", force=force)
     else:
         new, o = ops.apply_history(u, req["result"]["snapshots"])
+    if not o:  # composition inchangee : la revue compte quand meme pour la fraicheur
+        o = [{"op": "reviewed", "index": req["params"].get("index")}]
     if o:
         new = registry.save(new, u.rev, o, actor=actor, source=f"{req['type']}:{req_id}", config=config)
     rq.close(req_id, "applied", f"rev {new.rev}, {len(o)} operation(s)", config)

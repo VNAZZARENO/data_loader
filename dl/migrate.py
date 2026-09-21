@@ -38,8 +38,10 @@ def seed_universe(universe: str, config: dict, tickers_dir: Path | None = None):
     """CSV -> registre. Dates d'entree inconnues (``entry: null, entry_source: seed``)."""
     tickers = read_csv_tickers((tickers_dir or REPO / "tickers") / f"{universe}.csv")
     ov = config.get("universe_overrides", {}).get(universe, {})
-    index = (config.get("index_members", {}).get("index_override", {}) or {}).get(universe) \
-        or config.get("benchmarks", {}).get(universe)
+    im = config.get("index_members", {})
+    index = (im.get("index_override", {}) or {}).get(universe) or config.get("benchmarks", {}).get(universe)
+    if universe in (im.get("manual_universes") or []):   # le benchmark n'est pas la composition
+        index = None
     u = ops.create(
         universe, tickers, label=universe,
         kind="index" if index else "list",
