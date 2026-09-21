@@ -106,3 +106,16 @@ def test_request_flow_through_api(client, fake_blp):
     p = client.post("/api/universes/demo/refresh_index", json={}).json()
     assert client.delete(f"/api/requests/{p['id']}").status_code == 200
     assert client.delete(f"/api/requests/{p['id']}").status_code == 404
+
+
+def test_series_endpoint_transforms(client):
+    assert client.get("/api/universes/demo/fields").json()["raw"] == ["price"]
+    lvl = client.get("/api/universes/demo/series?field=price").json()
+    assert lvl["available"] == ["AAA FP", "BBB GY"] and lvl["AAA FP"][0] == 100.0 and lvl["last"]["BBB GY"] == 79.0
+    reb = client.get("/api/universes/demo/series?field=price&transform=rebase&tickers=BBB GY").json()
+    assert reb["tickers"] == ["BBB GY"] and reb["BBB GY"][0] == 100.0 and reb["BBB GY"][-1] == 158.0
+    idx = pd.bdate_range("2025-01-01", periods=3)
+    writer.upsert_long("demo", "raw", "total_return", pd.DataFrame({"AAA FP": [1.0, -0.5, 2.0], "NUL GY": [np.nan] * 3}, index=idx))
+    cum = client.get("/api/universes/demo/series?field=total_return&transform=cumret").json()
+    assert cum["available"] == ["AAA FP"] and cum["AAA FP"][-1] == pytest.approx(100 * 1.01 * 0.995 * 1.02, abs=1e-3)
+    assert client.get("/api/universes/demo/series?field=price&transform=nope").status_code == 422

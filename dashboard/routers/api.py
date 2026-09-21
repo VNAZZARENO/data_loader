@@ -122,6 +122,35 @@ def ew_index(universe: str, layer: str = Query("clean", pattern="^(raw|fx_eur|cl
     return cache.cached(universe, f"ew_{layer}_{int(pit)}", compute)
 
 
+MAX_SERIES = 8   # au-dela, un graphe en lignes n'est plus lisible (et la palette n'a que 8 teintes)
+
+
+@router.get("/universes/{universe}/fields")
+def universe_fields(universe: str):
+    _load(universe)
+    return {layer: store.fields(universe, layer, cfg()) for layer in store.LAYERS}
+
+
+@router.get("/universes/{universe}/series")
+def series(universe: str, field: str, layer: str = Query("raw", pattern="^(raw|fx_eur|clean)$"),
+           tickers: str = "", transform: str = Query("level", pattern="^(level|rebase|cumret)$"),
+           start: str | None = None):
+    """Donnees brutes d'un champ. ``rebase`` : base 100 a la premiere valeur de chaque serie ;
+    ``cumret`` : le champ est un rendement quotidien en % -> 100 * prod(1 + r/100)."""
+    _load(universe)
+    df = store.read(universe, field, layer=layer, start=start, splice_renames=False, config=cfg())
+    df = df.dropna(how="all", axis=1)
+    available = list(df.columns)
+    wanted = [t for t in tickers.split(",") if t in df.columns][:MAX_SERIES] or available[:MAX_SERIES]
+    df = df[wanted]
+    if transform == "rebase":
+        df = df / df.apply(lambda c: c.loc[c.first_valid_index()] if c.first_valid_index() is not None else float("nan")) * 100
+    elif transform == "cumret":
+        df = 100 * (1 + df.fillna(0) / 100).cumprod().where(df.notna().cummax())
+    return {**_series(df), "tickers": wanted, "available": available,
+            "last": {t: (None if df[t].dropna().empty else round(float(df[t].dropna().iloc[-1]), 4)) for t in wanted}}
+
+
 # -- composition -----------------------------------------------------------
 
 @router.post("/normalize")

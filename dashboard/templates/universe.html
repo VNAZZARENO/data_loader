@@ -4,7 +4,7 @@
 <div class="row"><div class="grow"><h2 id="title">{{ universe }}</h2><p class="sub" id="subtitle"></p></div>
 <button id="btnRefresh">Rafraichir depuis l'indice</button><button id="btnFetch"></button></div>
 <div class="tiles" id="tiles"></div>
-<div class="tabs" id="tabs"><button data-tab="overview" class="on">Apercu</button><button data-tab="quality">Qualite</button>
+<div class="tabs" id="tabs"><button data-tab="overview" class="on">Apercu</button><button data-tab="data">Donnees</button><button data-tab="quality">Qualite</button>
 <button data-tab="composition">Composition</button><button data-tab="history">Historique</button><button data-tab="runs">Runs</button></div>
 
 <section id="overview">
@@ -19,6 +19,18 @@
  <div class="card"><h3>Nombre de composants</h3>
   <div class="legend"><span><i style="background:var(--s1)"></i>Membres (registre)</span><span><i style="background:var(--s2)"></i>Membres avec un prix</span></div>
   <div id="countChart" class="chart short"></div></div>
+</section>
+
+<section id="data" hidden>
+ <div class="card"><div class="row"><h3 class="grow">Donnees du store</h3>
+  <label>Couche<select id="dLayer"><option>raw</option><option>fx_eur</option><option>clean</option></select></label>
+  <label>Champ<select id="dField"></select></label>
+  <label>Affichage<select id="dTransform"><option value="level">niveau</option><option value="rebase">base 100</option><option value="cumret">cumul de rendements quotidiens (%)</option></select></label>
+  <label>Depuis<input type="date" id="dStart"></label></div>
+  <div class="row"><label class="grow">Series (8 max, Ctrl+clic)<select id="dTickers" multiple size="6" style="width:100%"></select></label></div>
+  <div class="legend" id="dLegend" style="flex-wrap:wrap"></div><div id="dChart" class="chart"></div>
+  <p class="muted" id="dInfo" style="margin:6px 0 0"></p></div>
+ <div class="card scroll"><h3>Dernieres valeurs</h3><table id="dTable"><thead></thead><tbody></tbody></table></div>
 </section>
 
 <section id="quality" hidden>
@@ -58,7 +70,7 @@ async function reload() {
     ["Dernier run", META.last_run ? fmtDate(META.last_run.started_at) : "—", runBadge(META.last_run)]]
     .map(([k, v, d]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`).join("");
   $("#nostore").hidden = META.has_price; $$("#overview .card").forEach(c => c.hidden = !META.has_price);
-  if (META.in_store && !META.has_price) $("#nostore").textContent = `Cet univers n'a pas de champ « price » (champs du store : ${META.store_fields.join(", ")}) : pas d'indice equal-weight ni de compteur. Voir l'onglet Qualite.`;
+  if (META.in_store && !META.has_price) $("#nostore").textContent = `Cet univers n'a pas de champ « price » (champs du store : ${META.store_fields.join(", ")}) : pas d'indice equal-weight ni de compteur. Les series sont dans l'onglet Donnees.`;
   $("#candidates").innerHTML = META.rename_candidates.length ? `<div class="note"><b>Renommages possibles</b> (meme constituant, deux tickers) — a confirmer :<br>` +
     META.rename_candidates.map(c => `${esc(c.from)} → ${esc(c.to)} <span class="muted">${esc(c.reason)}</span> <button class="sm" onclick="linkRename('${esc(c.from)}','${esc(c.to)}')">Lier</button>`).join("<br>") + `</div>` : "";
   MEMBERS = await api("GET", `/universes/${U}/members`); renderMembers(); renderFlags();
@@ -120,9 +132,33 @@ async function runsTab() { const rs = await api("GET", `/universes/${U}/runs`);
    <td>${esc((r.date_range || []).join(" → "))}</td><td class="num">${r.n_requested}</td><td>${bad.map(([k, n]) => `${esc(k)}: ${n}`).join(", ")}</td>
    <td>${(r.fx_missing || []).length || ""}</td><td class="minus" style="white-space:normal">${esc(r.error || "")}</td></tr>`; }).join("") || `<tr><td colspan="9" class="muted">Aucun run enregistre.</td></tr>`; }
 
-const LOADERS = {overview: charts, quality: qualityTab, history: historyTab, runs: runsTab, composition: async () => {}};
+const CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
+const COLOR = {};   // la couleur suit le ticker, pas son rang : un filtre ne repeint pas les series restantes
+function colorOf(t) { if (!(t in COLOR)) COLOR[t] = CAT[Object.keys(COLOR).length % CAT.length]; return COLOR[t]; }
+let FIELDS = null;
+async function dataTab(keepSelection) {
+  if (!FIELDS) FIELDS = await api("GET", `/universes/${U}/fields`);
+  const layer = $("#dLayer").value, fields = FIELDS[layer] || [];
+  if ($("#dField").dataset.layer !== layer) { $("#dField").innerHTML = fields.map(f => `<option>${esc(f)}</option>`).join(""); $("#dField").dataset.layer = layer;
+    if (fields.includes("price")) $("#dField").value = "price"; keepSelection = false; }
+  if (!fields.length) { $("#dInfo").textContent = "Aucune donnee dans cette couche."; Plotly.purge("dChart"); $("#dLegend").innerHTML = ""; return; }
+  const picked = keepSelection ? [...$("#dTickers").selectedOptions].map(o => o.value) : [];
+  const q = new URLSearchParams({field: $("#dField").value, layer, transform: $("#dTransform").value, tickers: picked.join(",")});
+  if ($("#dStart").value) q.set("start", $("#dStart").value);
+  const d = await api("GET", `/universes/${U}/series?${q}`);
+  $("#dTickers").innerHTML = d.available.map(t => `<option ${d.tickers.includes(t) ? "selected" : ""}>${esc(t)}</option>`).join("");
+  $("#dLegend").innerHTML = d.tickers.map(t => `<span><i style="background:${colorOf(t)}"></i>${esc(t)}</span>`).join("");
+  lineChart("dChart", d.tickers.map(t => ({x: d.dates, y: d[t], name: t, color: colorOf(t), digits: 3})), $("#dTransform").value === "level" ? $("#dField").value : "base 100");
+  $("#dInfo").textContent = `${d.available.length} serie(s) avec des valeurs pour « ${$("#dField").value} » (${layer}) sur ${MEMBERS.length} tickers au registre.` + (d.available.length > 8 ? " 8 affichees : choisir dans la liste." : "");
+  const n = d.dates.length, rows = [...Array(Math.min(15, n)).keys()].map(i => n - 1 - i);
+  $("#dTable thead").innerHTML = `<tr><th>Date</th>${d.tickers.map(t => `<th class="num">${esc(t)}</th>`).join("")}</tr>`;
+  $("#dTable tbody").innerHTML = rows.map(i => `<tr><td>${d.dates[i]}</td>${d.tickers.map(t => `<td class="num">${d[t][i] == null ? "—" : d[t][i].toLocaleString("fr", {maximumFractionDigits: 4})}</td>`).join("")}</tr>`).join("");
+}
+const LOADERS = {data: () => dataTab(false), overview: charts, quality: qualityTab, history: historyTab, runs: runsTab, composition: async () => {}};
 $$("#tabs button").forEach(b => b.onclick = () => { $$("#tabs button").forEach(x => x.classList.toggle("on", x === b));
   $$("main section").forEach(s => s.hidden = s.id !== b.dataset.tab); LOADERS[b.dataset.tab]().catch(fail); });
+$("#dLayer").onchange = $("#dField").onchange = () => dataTab(false).catch(fail);
+$("#dTransform").onchange = $("#dStart").onchange = $("#dTickers").onchange = () => dataTab(true).catch(fail);
 $("#filter").oninput = $("#fStatus").onchange = renderMembers;
 $("#ewLayer").onchange = $("#ewPit").onchange = () => charts().catch(fail); $("#qLayer").onchange = () => qualityTab().catch(fail);
 $("#btnFetch").onclick = () => put(`/universes/${U}/fetch`, {enabled: !META.fetch_enabled}).then(after("Fetch Bloomberg mis a jour")).catch(oops);
@@ -130,5 +166,5 @@ $("#btnRefresh").onclick = () => api("POST", `/universes/${U}/refresh_index`, {}
 $("#btnPreview").onclick = () => api("POST", `/universes/${U}/members?dry_run=1`, {text: $("#addText").value}).then(r =>
   $("#addInfo").textContent = `${r.tickers.length} ticker(s) : ${r.tickers.join(", ")}` + (r.already_active.length ? ` · deja actifs : ${r.already_active.join(", ")}` : "") + (r.unknown_exchanges.length ? ` · places inconnues : ${r.unknown_exchanges.join(", ")}` : "")).catch(fail);
 $("#btnAdd").onclick = () => post(`/universes/${U}/members`, {text: $("#addText").value, date: $("#addDate").value || null}).then(r => { $("#addText").value = ""; toast(`${r.ops.length} ticker(s) ajoute(s)`); return reload(); }).catch(oops);
-reload().then(charts).catch(fail);
+reload().then(() => META.in_store && !META.has_price ? $('#tabs [data-tab="data"]').click() : charts()).catch(fail);
 </script>{% endblock %}

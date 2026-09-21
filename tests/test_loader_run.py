@@ -166,3 +166,13 @@ def test_store_run_layers_fx_refdata_and_joiner_backfill(store_cfg, fake_blp, sh
     loader.run()
     assert list(pd.read_excel(out, sheet_name="price", index_col=0).columns) == ["AAA FP", "NEW US"]
     assert store.read("sx5e", "price")["BBB LN"].last_valid_index() == pd.Timestamp("2025-05-30")
+
+
+def test_all_nan_column_is_reported_missing(cfg_path, fake_blp, share):
+    loader = _loader(cfg_path, fake_blp)
+    target = loader.tickers[1] + " Equity"
+    real = fake_blp._series
+    fake_blp._series = lambda t, f, idx: real(t, f, idx) * (float("nan") if t == target else 1)
+    loader.run()
+    rep = _latest(share)["per_field"]["price"]
+    assert rep["missing"] == [target] and rep["n_returned"] == len(loader.tickers) - 1

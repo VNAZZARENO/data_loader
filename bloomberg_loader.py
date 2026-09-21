@@ -505,7 +505,9 @@ class ATLASBloombergLoader:
             combined = combined.droplevel(1, axis=1)
 
         # A batch can silently return fewer columns than requested: persist the gap.
-        returned = set(combined.columns)
+        # A column with no value at all (field not applicable to the security) is not
+        # data: the store drops it, so the manifest must not count it as returned.
+        returned = set(combined.columns[combined.notna().any()])
         report.n_returned = len(returned)
         report.missing = sorted(set(bbg_tickers) - returned - set(failed_tickers))
         report.seconds = round(time.monotonic() - t0, 2)
