@@ -89,3 +89,18 @@ def test_apply_history_builds_periods():
     assert per("BBB GY") == [("2024-06-28", "2025-08-01")]               # sortie connue conservee
     assert per("OLD FP") == [("2024-03-29", "2024-09-30")] and not new.member("OLD FP").active
     assert len(o) == 3
+
+
+def test_member_column_handles_long_xbbg_frame():
+    import pandas as pd
+    import index_members as im
+
+    long = pd.DataFrame({"ticker": ["SX5E Index"] * 2, "field": ["INDX_MEMBERS"] * 2,
+                         "Member Ticker and Exchange Code": ["MC FP", "SAP GY"]})
+    assert im.member_column(long) == "Member Ticker and Exchange Code"
+
+    class Blp:
+        def bds(self, *a, **k):
+            return long
+    assert im.fetch_index_members("SX5E Index", Blp()) == ["MC FP", "SAP GY"]
+    assert im.member_column(pd.DataFrame({"member_ticker_and_exchange_code": ["A"]})) == "member_ticker_and_exchange_code"

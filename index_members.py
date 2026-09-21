@@ -24,6 +24,7 @@ real membership changes instead of a convention-wide churn.
 from __future__ import annotations
 
 import logging
+import re
 import os
 import shutil
 import sys
@@ -48,6 +49,29 @@ def _split_ticker(t: str) -> tuple[str, str]:
     return root, exch
 
 
+def _norm(col) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(col).lower()).strip("_")
+
+
+def member_column(df):
+    """Column holding the members, whatever the xbbg version calls it.
+
+    Newer xbbg returns a long frame ['ticker', 'field', 'Member Ticker and Exchange Code']
+    where 'ticker' is the INDEX itself: never fall back to it.
+    """
+    by_norm = {_norm(c): c for c in df.columns}
+    for wanted in _MEMBER_COLS:
+        if wanted in by_norm:
+            return by_norm[wanted]
+    candidates = [c for c in df.columns if _norm(c) not in ("ticker", "field", "security")]
+    fuzzy = [c for c in candidates if "member" in _norm(c) or "ticker" in _norm(c)]
+    if not (fuzzy or candidates):
+        raise RuntimeError(f"INDX_MEMBERS: no member column in {list(df.columns)}")
+    col = (fuzzy or candidates)[0]
+    logger.warning("INDX_MEMBERS: member column guessed as %r (columns were: %s)", col, list(df.columns))
+    return col
+
+
 def fetch_index_members(index: str, blp_module) -> list[str]:
     """Return the current constituents of `index` as raw 'TICKER EXCH' strings.
 
@@ -58,16 +82,7 @@ def fetch_index_members(index: str, blp_module) -> list[str]:
     if df is None or df.empty:
         raise RuntimeError(f"INDX_MEMBERS returned no rows for {index!r}")
 
-    col = next((c for c in _MEMBER_COLS if c in df.columns), None)
-    if col is None:
-        # fall back to the first column but make the guess visible
-        col = list(df.columns)[0]
-        logger.warning(
-            "INDX_MEMBERS: expected member column not found, using %r "
-            "(columns were: %s)",
-            col,
-            list(df.columns),
-        )
+    col = member_column(df)
 
     members = [str(v).strip() for v in df[col] if str(v).strip() and str(v) != "nan"]
     if not members:

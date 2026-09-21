@@ -45,9 +45,8 @@ def run_index_members_hist(index: str, dates: list[str], blp, config: dict | Non
     for d in dates:
         try:
             df = blp.bds(index, "INDX_MWEIGHT_HIST", END_DATE_OVERRIDE=d.replace("-", ""))
-            col = next((c for c in df.columns if "ticker" in str(c).lower() or "member" in str(c).lower()),
-                       df.columns[0] if len(df.columns) else None)
-            raw = [str(x).strip() for x in (df[col] if col is not None else []) if str(x).strip()]
+            col = index_members.member_column(df)
+            raw = [str(x).strip() for x in df[col] if str(x).strip() and str(x) != "nan"]
             if not raw:
                 raise ValueError("reponse vide")
             learned = index_members.learn_exchange_map(raw, sample)
