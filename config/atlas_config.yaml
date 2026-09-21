@@ -122,7 +122,12 @@ universe_overrides:
   euro_credit:
     ticker_suffix: ''
     fx_layer: false
+    # Un rendement quotidien ne se prolonge pas : un ffill fabriquerait de faux rendements
+    # quand la feuille est realignee sur le calendrier de 'price'.
+    no_ffill_fields: [total_return]
     fields:
+      # niveau (taux, swaps, spreads CDS, indices) : le seul champ servi pour les 14 instruments
+      price: PX_LAST
       total_return: DAY_TO_DAY_TOT_RETURN_GROSS_DVDS
       oas: OAS_SPREAD_BID
       ytw: YLD_YTW_BID

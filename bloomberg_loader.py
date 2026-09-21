@@ -119,6 +119,9 @@ class ATLASBloombergLoader:
         self.ticker_suffix = overrides.get("ticker_suffix", default_suffix)
         self.bdh_options = overrides.get("bdh_options", self.config["bloomberg"].get("bdh_options", {}))
         self.fields = self._resolve_fields(overrides)
+        self.no_ffill_fields = set(
+            overrides.get("no_ffill_fields", self.config["bloomberg"].get("no_ffill_fields", []))
+        )
         self.tickers = self._resolve_universe_tickers()
         self.output_path = self._resolve_output_path()
         store_cfg = self.config.get("store", {})
@@ -400,8 +403,11 @@ class ATLASBloombergLoader:
         wm = self._watermarks().get(alias, {})
         new = [t for t in self.tickers if t not in wm]
         known = [t for t in self.tickers if t in wm]
-        if not wm or self.start_date <= self.full_start_date:
+        if self.start_date <= self.full_start_date:
             return [(self.tickers, self.start_date)]
+        if not wm:  # field added to the profile after the first runs: full history, not just today
+            logger.info(f"  New field '{alias}' for this store: backfill from {self.full_start_date}")
+            return [(self.tickers, self.full_start_date)]
         groups = []
         if known:
             groups.append((known, self.start_date))
@@ -806,7 +812,9 @@ class ATLASBloombergLoader:
                         f"  Reindexing '{sheet_name}' from {len(df)} to "
                         f"{len(master_index)} rows (forward-fill)"
                     )
-                    results[sheet_name] = df.reindex(master_index).ffill()
+                    aligned = df.reindex(master_index)
+                    # a daily return is not a level: forward-filling it would invent returns
+                    results[sheet_name] = aligned if sheet_name in self.no_ffill_fields else aligned.ffill()
 
         # Extract benchmark if configured
         benchmark_df = pd.DataFrame()
@@ -845,6 +853,7 @@ class ATLASBloombergLoader:
                                       self.config["parameters"],
                                       tickers=[t for t in self.tickers if t not in self._xlsx_exclude],
                                       only_listed=bool(self._xlsx_exclude),
+                                      no_ffill=self.no_ffill_fields,
                                       config=self.config, test=self.test)
             self._manifest.xlsx = {**info, "seconds": round(time.monotonic() - t0, 2), "source": "store"}
             logger.info(f"Output written from store: {self.output_path}")

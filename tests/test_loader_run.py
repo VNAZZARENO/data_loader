@@ -176,3 +176,37 @@ def test_all_nan_column_is_reported_missing(cfg_path, fake_blp, share):
     loader.run()
     rep = _latest(share)["per_field"]["price"]
     assert rep["missing"] == [target] and rep["n_returned"] == len(loader.tickers) - 1
+
+
+@pytest.mark.parametrize("from_store", [False, True])
+def test_no_ffill_fields_are_aligned_without_forward_fill(cfg_path, fake_blp, share, tmp_path, from_store):
+    cfg = yaml.safe_load(cfg_path.read_text())
+    cfg["fields"] = {"price": "PX_LAST", "total_return": "TR", "EPS": "IS_EPS"}
+    cfg["bloomberg"]["no_ffill_fields"] = ["total_return"]
+    cfg["store"] = {"enabled": from_store, "xlsx_from_store": from_store}
+    cfg_path.write_text(yaml.safe_dump(cfg))
+    real = fake_blp.bdh
+
+    def sparse(tickers, flds, start_date, end_date, **kw):   # champs creux : un jour sur deux
+        df = real(tickers, flds, start_date, end_date, **kw)
+        return df if flds == ["PX_LAST"] else df.iloc[::2]
+
+    fake_blp.bdh = sparse
+    _loader(cfg_path, fake_blp).run()
+    out = tmp_path / "out" / "ATLAS_data_sx5e_static.xlsx"
+    price, tr, eps = (pd.read_excel(out, sheet_name=s, index_col=0) for s in ("price", "total_return", "EPS"))
+    assert len(tr) == len(eps) == len(price)
+    assert tr.iloc[1].isna().all() and tr.iloc[0].notna().all()      # rendement : pas de ffill
+    assert eps.iloc[1].notna().all()                                  # fondamental : ffill conserve
+
+
+def test_field_added_later_is_backfilled_on_daily(store_cfg, fake_blp, share):
+    from dl import store
+    _loader(store_cfg, fake_blp).run()
+    cfg = yaml.safe_load(store_cfg.read_text())
+    cfg["fields"]["Pxtobook"] = "PX_TO_BOOK_RATIO"
+    store_cfg.write_text(yaml.safe_dump(cfg))
+    loader = bl.ATLASBloombergLoader(str(store_cfg), universe="sx5e", daily=True, blp_module=fake_blp)
+    loader.end_date = "2025-04-30"
+    loader.run()
+    assert store.read("sx5e", "Pxtobook").index.min() == store.read("sx5e", "price").index.min()
