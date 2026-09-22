@@ -149,6 +149,12 @@ def ew_index(universe: str, layer: str = "clean", pit_members: bool = True, base
     Methode : r_t = moyenne_i( P_i,t / P_i,t-1 - 1 ) sur les i membres a t (masque PIT du registre)
     ayant un prix a t-1 et a t ; indice = base * prod(1 + r_t). Pas de frais, pas de poids flottants.
     """
+    ew_config = (config or {}).get("universe_overrides", {}).get(universe, {}).get("ew_index", {})
+    if not ew_config.get("enabled", True):
+        out = pd.DataFrame(columns=["ew", "n", "benchmark"])
+        out.attrs["layer_used"] = layer
+        out.attrs["unavailable_reason"] = ew_config.get("reason", "Indice equal-weight desactive pour cet univers.")
+        return out
     u = registry.load(universe, config)
     px = store.read(universe, "price", layer=layer, config=config)
     if px.empty and layer != "raw":
@@ -156,7 +162,8 @@ def ew_index(universe: str, layer: str = "clean", pit_members: bool = True, base
         layer, px = "raw", store.read(universe, "price", layer="raw", config=config)
     if px.empty:
         return pd.DataFrame(columns=["ew", "n", "benchmark"])
-    rets = px.pct_change(fill_method=None)
+    # A zero previous price has no defined percentage return.
+    rets = px.pct_change(fill_method=None).replace([np.inf, -np.inf], np.nan)
     if pit_members:
         fv = px.apply(lambda c: c.first_valid_index())
         mask = pit.membership_mask(u, px.index, fv).reindex(columns=px.columns, fill_value=False)
@@ -166,7 +173,7 @@ def ew_index(universe: str, layer: str = "clean", pit_members: bool = True, base
     bench = reader.read_benchmark(universe, ["price"], config=config)
     if not bench.empty:
         b = bench["price"].reindex(px.index).ffill()
-        first = b.first_valid_index()
+        first = b.where(np.isfinite(b) & b.ne(0)).first_valid_index()
         if first is not None:
             out["benchmark"] = b / b.loc[first] * out["ew"].loc[first]
     out = out[[c for c in ("ew", "n", "benchmark") if c in out.columns]]

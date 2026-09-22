@@ -3,6 +3,8 @@ Aucune authentification, par regle de la maison."""
 
 from __future__ import annotations
 
+import math
+
 from fastapi import APIRouter, Body, HTTPException, Query
 
 from dl import manifests, quality, registry, requests_apply, requests_queue as rq, store, tickers as tk
@@ -101,9 +103,16 @@ def universe_quality(universe: str, layer: str = Query("raw", pattern="^(raw|fx_
     return cache.cached(universe, f"quality_{layer}", lambda: quality.field_quality(universe, layer, config=cfg()))
 
 
+def _number(value):
+    if value is None:
+        return None
+    value = float(value)
+    return round(value, 4) if math.isfinite(value) else None
+
+
 def _series(df):
     return {"dates": [d.date().isoformat() for d in df.index],
-            **{c: [None if v != v else round(float(v), 4) for v in df[c]] for c in df.columns}}
+            **{c: [_number(v) for v in df[c]] for c in df.columns}}
 
 
 @router.get("/universes/{universe}/count_series")
@@ -118,8 +127,9 @@ def ew_index(universe: str, layer: str = Query("clean", pattern="^(raw|fx_eur|cl
     def compute():
         df = quality.ew_index(universe, layer, pit, config=cfg())
         return {**_series(df), "layer_used": df.attrs.get("layer_used", layer),
-                "n_members_last": df.attrs.get("n_members_last"), "n_priced_last": df.attrs.get("n_priced_last")}
-    return cache.cached(universe, f"ew_{layer}_{int(pit)}", compute)
+                "n_members_last": df.attrs.get("n_members_last"), "n_priced_last": df.attrs.get("n_priced_last"),
+                "unavailable_reason": df.attrs.get("unavailable_reason")}
+    return cache.cached(universe, f"ew_v2_{layer}_{int(pit)}", compute)
 
 
 MAX_SERIES = 8   # au-dela, un graphe en lignes n'est plus lisible (et la palette n'a que 8 teintes)
@@ -148,7 +158,7 @@ def series(universe: str, field: str, layer: str = Query("raw", pattern="^(raw|f
     elif transform == "cumret":
         df = 100 * (1 + df.fillna(0) / 100).cumprod().where(df.notna().cummax())
     return {**_series(df), "tickers": wanted, "available": available,
-            "last": {t: (None if df[t].dropna().empty else round(float(df[t].dropna().iloc[-1]), 4)) for t in wanted}}
+            "last": {t: (None if df[t].dropna().empty else _number(df[t].dropna().iloc[-1])) for t in wanted}}
 
 
 # -- composition -----------------------------------------------------------

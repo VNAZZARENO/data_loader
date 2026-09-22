@@ -119,3 +119,44 @@ def test_series_endpoint_transforms(client):
     cum = client.get("/api/universes/demo/series?field=total_return&transform=cumret").json()
     assert cum["available"] == ["AAA FP"] and cum["AAA FP"][-1] == pytest.approx(100 * 1.01 * 0.995 * 1.02, abs=1e-3)
     assert client.get("/api/universes/demo/series?field=price&transform=nope").status_code == 422
+
+
+@pytest.mark.parametrize("pit", [True, False])
+def test_euro_credit_ew_is_unavailable_but_data_and_counts_work(client, monkeypatch, pit):
+    import yaml
+    from pathlib import Path
+    from dashboard import cache, settings
+
+    cfg = settings.config()
+    real_cfg = yaml.safe_load((Path(__file__).parents[1] / "config" / "atlas_config.yaml").read_text())
+    cfg["universe_overrides"] = real_cfg["universe_overrides"]
+    monkeypatch.setattr(settings, "config", lambda: cfg)
+    registry.save(ops.create("euro_credit", ["EUSA7 Curncy"], ticker_suffix="", date="2025-01-01"), None)
+    px = pd.DataFrame({"EUSA7 Curncy": [-0.1, 0.0, 0.1]}, index=pd.bdate_range("2025-01-01", periods=3))
+    writer.upsert_long("euro_credit", "clean", "price", px)
+    writer.upsert_long("euro_credit", "raw", "price", px)
+    # Legacy caches could contain Infinity and must not survive the fix.
+    cache.cached("euro_credit", f"ew_clean_{int(pit)}", lambda: {"ew": [float("-inf")]})
+    for _ in range(2):
+        response = client.get(f"/api/universes/euro_credit/ew_index?layer=clean&pit={str(pit).lower()}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["dates"] == [] and data["ew"] == []
+        assert "taux" in data["unavailable_reason"]
+    assert client.get("/api/universes/euro_credit/count_series").json()["with_price"] == [1, 1, 1]
+    assert client.get("/api/universes/euro_credit/series?field=price&layer=clean").json()["EUSA7 Curncy"] == [-0.1, 0.0, 0.1]
+
+
+def test_series_nonfinite_values_and_zero_rebase_are_json_null(client):
+    idx = pd.bdate_range("2025-01-01", periods=4)
+    writer.upsert_long("demo", "raw", "zero_test", pd.DataFrame({"AAA FP": [0, 1, 2, 3]}, index=idx))
+    result = client.get("/api/universes/demo/series?field=zero_test&transform=rebase")
+    assert result.status_code == 200
+    assert result.json()["AAA FP"] == [None] * 4
+    assert result.json()["last"]["AAA FP"] is None
+    writer.upsert_long("demo", "raw", "inf_test",
+                       pd.DataFrame({"AAA FP": [1, np.inf, -np.inf, np.nan]}, index=idx))
+    result = client.get("/api/universes/demo/series?field=inf_test")
+    assert result.status_code == 200
+    assert result.json()["AAA FP"] == [1, None, None]
+    assert result.json()["last"]["AAA FP"] is None

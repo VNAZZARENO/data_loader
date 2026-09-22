@@ -120,6 +120,9 @@ universe_overrides:
     fields:
       price: PX_LAST
   euro_credit:
+    ew_index:
+      enabled: false
+      reason: "Indice equal-weight indisponible : cet univers melange taux, swaps, spreads CDS et indices. Leurs variations de niveau ne representent pas des rendements de portefeuille. Consultez les series par ticker dans l'onglet Donnees."
     ticker_suffix: ''
     fx_layer: false
     # Un rendement quotidien ne se prolonge pas : un ffill fabriquerait de faux rendements

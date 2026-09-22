@@ -12,10 +12,10 @@
  <div class="card"><div class="row"><h3 class="grow">Indice equal-weight quotidien (base 100)</h3>
   <label>Couche<select id="ewLayer"><option value="clean">clean</option><option value="fx_eur">fx_eur</option><option value="raw">raw (devise locale)</option></select></label>
   <label>Appartenance<select id="ewPit"><option value="true">point-in-time (registre)</option><option value="false">tous les tickers</option></select></label></div>
-  <div class="legend"><span><i style="background:var(--s1)"></i>Equal-weight</span><span id="lgBench" hidden><i style="background:var(--s2)"></i>Benchmark (rebase)</span></div>
+  <div id="ewLegend" class="legend"><span><i style="background:var(--s1)"></i>Equal-weight</span><span id="lgBench" hidden><i style="background:var(--s2)"></i>Benchmark (rebase)</span></div>
   <div id="ewNote" class="note" hidden></div>
   <div id="ewChart" class="chart"></div>
-  <p class="muted" style="margin:6px 0 0">Moyenne des rendements journaliers des membres du jour ayant un prix a t-1 et t, cumulee. Les entrees de source <code>seed</code>/<code>first_valid</code> sont des hypotheses : le survivorship d'avant le premier suivi n'est pas corrige.</p></div>
+  <p id="ewMethod" class="muted" style="margin:6px 0 0">Moyenne des rendements journaliers des membres du jour ayant un prix a t-1 et t, cumulee. Les entrees de source <code>seed</code>/<code>first_valid</code> sont des hypotheses : le survivorship d'avant le premier suivi n'est pas corrige.</p></div>
  <div class="card"><h3>Nombre de composants</h3>
   <div class="legend"><span><i style="background:var(--s1)"></i>Membres (registre)</span><span><i style="background:var(--s2)"></i>Membres avec un prix</span></div>
   <div id="countChart" class="chart short"></div></div>
@@ -104,13 +104,21 @@ function unlink(t) { api("DELETE", `/universes/${U}/renames/${encodeURIComponent
 async function charts() {
   if (!META.has_price) return;
   const ew = await api("GET", `/universes/${U}/ew_index?layer=${$("#ewLayer").value}&pit=${$("#ewPit").value}`);
-  const tr = [{x: ew.dates, y: ew.ew, name: "Equal-weight", color: PLOT.s1}];
-  if (ew.benchmark) tr.push({x: ew.dates, y: ew.benchmark, name: "Benchmark", color: PLOT.s2});
-  const notes = [];
-  if (ew.layer_used !== $("#ewLayer").value) notes.push(`Couche « ${$("#ewLayer").value} » vide (taux FX pas encore extraits sur le poste Bloomberg) : indice calcule sur « ${ew.layer_used} », en devise locale.`);
-  if (ew.n_members_last && ew.n_priced_last < 0.9 * ew.n_members_last) notes.push(`Seuls ${ew.n_priced_last} des ${ew.n_members_last} membres ont un prix dans la couche « ${ew.layer_used} » a la derniere date : les titres sans taux de change sont absents (conversion EUR fail-closed). Choisir « raw » pour l'univers complet en devise locale.`);
-  $("#ewNote").hidden = !notes.length; $("#ewNote").textContent = notes.join(" ");
-  $("#lgBench").hidden = !ew.benchmark; lineChart("ewChart", tr, "base 100");
+  const unavailable = Boolean(ew.unavailable_reason);
+  ["#ewChart", "#ewLegend", "#ewMethod"].forEach(id => $(id).hidden = unavailable);
+  if (unavailable) {
+    Plotly.purge("ewChart");
+    $("#ewNote").hidden = false;
+    $("#ewNote").textContent = ew.unavailable_reason;
+  } else {
+    const tr = [{x: ew.dates, y: ew.ew, name: "Equal-weight", color: PLOT.s1}];
+    if (ew.benchmark) tr.push({x: ew.dates, y: ew.benchmark, name: "Benchmark", color: PLOT.s2});
+    const notes = [];
+    if (ew.layer_used !== $("#ewLayer").value) notes.push(`Couche « ${$("#ewLayer").value} » vide (taux FX pas encore extraits sur le poste Bloomberg) : indice calcule sur « ${ew.layer_used} », en devise locale.`);
+    if (ew.n_members_last && ew.n_priced_last < 0.9 * ew.n_members_last) notes.push(`Seuls ${ew.n_priced_last} des ${ew.n_members_last} membres ont un prix dans la couche « ${ew.layer_used} » a la derniere date : les titres sans taux de change sont absents (conversion EUR fail-closed). Choisir « raw » pour l'univers complet en devise locale.`);
+    $("#ewNote").hidden = !notes.length; $("#ewNote").textContent = notes.join(" ");
+    $("#lgBench").hidden = !ew.benchmark; lineChart("ewChart", tr, "base 100");
+  }
   const c = await api("GET", `/universes/${U}/count_series`);
   lineChart("countChart", [{x: c.dates, y: c.members, name: "Membres (registre)", color: PLOT.s1, step: true, digits: 0},
                            {x: c.dates, y: c.with_price, name: "Avec un prix", color: PLOT.s2, step: true, digits: 0}], "tickers");

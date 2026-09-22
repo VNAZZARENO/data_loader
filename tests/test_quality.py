@@ -60,3 +60,17 @@ def test_count_series_and_quality_flags(demo):
     fq = quality.field_quality("demo")[0]
     assert fq["field"] == "price" and fq["n_active"] == 3 and fq["missing_active"] == ["GHOST NA"]
     assert fq["nan_last_pct"] == 0.0
+
+
+def test_ew_index_ignores_undefined_returns_after_zero(share):
+    idx = pd.bdate_range("2025-01-01", periods=3)
+    registry.save(ops.create("zeros", ["ZERO", "OK"], date="2025-01-01"), None)
+    px = pd.DataFrame({"ZERO": [0.0, 10.0, 11.0], "OK": [100.0, 110.0, 121.0]}, index=idx)
+    writer.upsert_long("zeros", "clean", "price", px)
+    writer.upsert_long("zeros", "_benchmark", "price",
+                       pd.DataFrame({"benchmark": [0.0, 100.0, 110.0]}, index=idx))
+    out = quality.ew_index("zeros")
+    assert out["ew"].tolist() == pytest.approx([100, 110, 121])
+    assert out["n"].tolist() == [0, 1, 2]
+    assert np.isfinite(out["benchmark"]).all()
+    assert out["benchmark"].iloc[1] == pytest.approx(110)
