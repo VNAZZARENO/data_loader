@@ -185,6 +185,29 @@ corrigé que par une demande d'historique (`INDX_MWEIGHT_HIST`).
 
 Ticker lists live in `tickers/<universe>.csv` (single `Ticker` column).
 
+### `euro_credit` diagnostics
+
+This mixed universe contains rates, swaps, CDS and credit indices. The configured
+fields are requested for every ticker; their availability must be validated on
+Bloomberg for each instrument. A workbook can be written while the run is
+`partial`: columns without values do not count as returned data.
+
+If credit fields are empty or `HE00 Index` has no prices, run on the Bloomberg PC:
+
+```bash
+python probe_euro_credit.py > probe_euro_credit.txt
+```
+
+The probe prints raw BDP and 30-day BDH replies for `LECPTREU Index` and
+`HE00 Index`, including `securityError`, `fieldExceptions` and `responseError`
+when present. It reads the configured credit fields and does not write the
+workbook or store. Use `--tickers`, `--fields`, `--days` or `--end-date` to
+investigate other instruments, terminal-validated mnemonics or historical windows.
+BDP availability does not imply BDH availability; an empty short window does not
+prove there is no older history. The probe omits fill/calendar overrides to check
+native availability. Validate replacement mnemonics and historical support in
+Bloomberg `FLDS` before changing the mapping.
+
 ### `option_europe` (implied-volatility surface)
 
 Dedicated universe for OTM-put / volatility-tail research on PEQ. Mixes

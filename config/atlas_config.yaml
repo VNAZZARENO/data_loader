@@ -126,9 +126,11 @@ universe_overrides:
     # quand la feuille est realignee sur le calendrier de 'price'.
     no_ffill_fields: [total_return]
     fields:
-      # niveau (taux, swaps, spreads CDS, indices) : le seul champ servi pour les 14 instruments
+      # Niveau (taux, swaps, spreads CDS, indices) ; disponibilite a verifier par ticker.
       price: PX_LAST
       total_return: DAY_TO_DAY_TOT_RETURN_GROSS_DVDS
+      # Champs credit a valider sur le terminal pour ces indices (probe_euro_credit.py).
+      # Un champ valide sur une obligation ne l'est pas necessairement sur un indice.
       oas: OAS_SPREAD_BID
       ytw: YLD_YTW_BID
       duration: DUR_ADJ_MID

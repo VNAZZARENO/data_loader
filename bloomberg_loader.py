@@ -118,6 +118,9 @@ class ATLASBloombergLoader:
                 self.agents = reg.fields_profile
         self.ticker_suffix = overrides.get("ticker_suffix", default_suffix)
         self.bdh_options = overrides.get("bdh_options", self.config["bloomberg"].get("bdh_options", {}))
+        # Extraction requires pandas with (ticker, field) columns, regardless of
+        # xbbg defaults or session-wide output settings.
+        self.bdh_options = {**self.bdh_options, "backend": "pandas", "format": "wide"}
         self.fields = self._resolve_fields(overrides)
         self.no_ffill_fields = set(
             overrides.get("no_ffill_fields", self.config["bloomberg"].get("no_ffill_fields", []))
@@ -534,7 +537,8 @@ class ATLASBloombergLoader:
         combined.columns = [c.replace(self.ticker_suffix, "") for c in combined.columns]
 
         logger.info(
-            f"  {bbg_field}: {combined.shape[1]} tickers, {combined.shape[0]} dates"
+            f"  {bbg_field}: {len(returned)}/{len(bbg_tickers)} tickers with data, "
+            f"{combined.shape[0]} dates ({combined.shape[1]} columns)"
         )
         if failed_tickers:
             logger.warning(
@@ -633,7 +637,8 @@ class ATLASBloombergLoader:
             return
         try:
             raw = self.blp.bdp([t + self.ticker_suffix for t in todo],
-                               ["CRNCY", "NAME", "GICS_SECTOR_NAME"])
+                               ["CRNCY", "NAME", "GICS_SECTOR_NAME"],
+                               backend="pandas", format="wide")
         except Exception as e:
             logger.warning(f"Reference data (BDP) failed, FX falls back to the exchange map: {e}")
             return

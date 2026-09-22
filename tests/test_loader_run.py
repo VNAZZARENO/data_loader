@@ -210,3 +210,37 @@ def test_field_added_later_is_backfilled_on_daily(store_cfg, fake_blp, share):
     loader.end_date = "2025-04-30"
     loader.run()
     assert store.read("sx5e", "Pxtobook").index.min() == store.read("sx5e", "price").index.min()
+
+
+def test_bloomberg_calls_pin_pandas_wide(store_cfg, fake_blp, share):
+    # A changed global xbbg format must not break extraction, benchmark or FX.
+    fake_blp.refdata = {"AAA FP Equity": {"CRNCY": "USD"}}
+    from dl import registry
+    from dl.registry import ops
+    registry.save(ops.create("sx5e", ["AAA FP"]), None)
+    calls = []
+    for name in ("bdh", "bdp"):
+        original = getattr(fake_blp, name)
+
+        def checked(*args, _original=original, _name=name, **kwargs):
+            assert kwargs["backend"] == "pandas"
+            assert kwargs["format"] == "wide"
+            calls.append((_name, args, kwargs))
+            return _original(*args, **kwargs)
+
+        setattr(fake_blp, name, checked)
+    _loader(store_cfg, fake_blp).run()
+    assert any(name == "bdp" for name, _, _ in calls)
+    assert any(kw.get("tickers") == ["EURUSD Curncy"] for _, _, kw in calls)
+    assert any(kw.get("tickers") == ["SX5E Index"] for _, _, kw in calls)
+
+
+def test_field_log_counts_only_populated_columns(cfg_path, fake_blp, caplog):
+    loader = _loader(cfg_path, fake_blp)
+    loader.tickers = loader.tickers[:2]
+    target = loader.tickers[1] + " Equity"
+    original = fake_blp._series
+    fake_blp._series = lambda t, f, idx: original(t, f, idx) * (float("nan") if t == target else 1)
+    with caplog.at_level("INFO", logger="bloomberg_loader"):
+        loader._extract_field("PX_LAST")
+    assert "PX_LAST: 1/2 tickers with data" in caplog.text
