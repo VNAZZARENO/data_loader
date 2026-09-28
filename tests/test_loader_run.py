@@ -84,9 +84,10 @@ def test_loader_reads_registry_and_honours_fetch_switches(cfg_path, fake_blp, sh
     assert asked == {"AAA FP Equity", "BBB GY Equity"}
     m = _latest(share)
     assert m["ticker_source"] == "registry" and m["registry_rev"] == 1
-    # le xlsx reste l'univers tradable des strategies ATLAS : pas de deprecated dedans
+    # le xlsx reste l'univers tradable des strategies ATLAS : pas de deprecated dedans,
+    # mais l'actif au fetch coupe garde sa colonne (vide)
     out = cfg_path.parent / "out" / "ATLAS_data_sx5e_static.xlsx"
-    assert list(pd.read_excel(out, sheet_name="price", index_col=0).columns) == ["AAA FP"]
+    assert list(pd.read_excel(out, sheet_name="price", index_col=0).columns) == ["AAA FP", "DDD IM"]
 
 
 def test_universe_fetch_disabled_refuses_to_run(cfg_path, fake_blp, share):
@@ -244,3 +245,23 @@ def test_field_log_counts_only_populated_columns(cfg_path, fake_blp, caplog):
     with caplog.at_level("INFO", logger="bloomberg_loader"):
         loader._extract_field("PX_LAST")
     assert "PX_LAST: 1/2 tickers with data" in caplog.text
+
+
+def test_active_ticker_with_fetch_off_stays_in_xlsx_as_empty_column(cfg_path, fake_blp, share):
+    from dl import registry
+    from dl.registry import ops
+
+    u = ops.create("sx5e", ["AAA FP", "BBB GY", "CCC NA"], date="2025-01-02")
+    u, _ = ops.deprecate(u, "CCC NA", "2025-02-03", "index")
+    u, _ = ops.toggle_fetch(u, False, "CCC NA")                   # sortant coupe : absent du xlsx
+    u, _ = ops.toggle_fetch(u, False, "BBB GY")                   # actif coupe : colonne N/A
+    registry.save(u, None)
+
+    loader = _loader(cfg_path, fake_blp)
+    loader.run()
+    assert not any(t.startswith("BBB GY") for t in fake_blp.requested_tickers())
+    out = cfg_path.parent / "out" / "ATLAS_data_sx5e_static.xlsx"
+    for sheet in ("price", "EPS"):
+        df = pd.read_excel(out, sheet_name=sheet, index_col=0)
+        assert list(df.columns) == ["AAA FP", "BBB GY"]
+        assert df["BBB GY"].isna().all() and df["AAA FP"].notna().any()

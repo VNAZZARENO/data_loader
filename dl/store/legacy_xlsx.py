@@ -23,7 +23,8 @@ NON_FIELD_SHEETS = {"parameters", "benchmark"}
 
 def build_sheets(universe: str, field_aliases: list[str], tickers: list[str] | None = None,
                  config=None, test=False, only_listed: bool = False,
-                 no_ffill: set[str] | None = None) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
+                 no_ffill: set[str] | None = None,
+                 empty_columns: list[str] | None = None) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
     """Reproduit la mise en forme du loader : feuilles alignees sur l'index ``price`` + ffill."""
     sheets = {a: reader._read_dir(layout.field_dir(universe, "raw", a, config, test)) for a in field_aliases}
     if tickers:  # ordre des colonnes = ordre de la liste, puis le reste (sortants historiques)
@@ -37,6 +38,10 @@ def build_sheets(universe: str, field_aliases: list[str], tickers: list[str] | N
             if a != "price" and not df.empty and len(df) < len(price.index):
                 aligned = df.reindex(price.index)
                 sheets[a] = aligned if a in (no_ffill or set()) else aligned.ffill()
+    for a, df in sheets.items():  # actifs au fetch coupe : colonne vide (N/A) dans le xlsx
+        missing = [t for t in empty_columns or [] if t not in df.columns]
+        if missing and not df.empty:
+            sheets[a] = df.reindex(columns=[*df.columns, *missing])
     return sheets, reader.read_benchmark(universe, field_aliases, config=config, test=test)
 
 
@@ -58,8 +63,9 @@ def write_workbook(path, parameters: dict, sheets: dict[str, pd.DataFrame], benc
 
 def export(universe: str, path: str | Path, field_aliases: list[str], parameters: dict,
            tickers: list[str] | None = None, config=None, test=False, only_listed: bool = False,
-           no_ffill: set[str] | None = None) -> dict:
-    sheets, bench = build_sheets(universe, field_aliases, tickers, config, test, only_listed, no_ffill)
+           no_ffill: set[str] | None = None, empty_columns: list[str] | None = None) -> dict:
+    sheets, bench = build_sheets(universe, field_aliases, tickers, config, test, only_listed, no_ffill,
+                                 empty_columns)
     if all(df.empty for df in sheets.values()):
         raise ValueError(f"Store vide pour {universe} : export xlsx refuse")
     smbio.atomic_write_via(path, lambda tmp: write_workbook(tmp, parameters, sheets, bench))

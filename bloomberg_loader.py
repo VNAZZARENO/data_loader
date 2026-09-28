@@ -297,6 +297,8 @@ class ATLASBloombergLoader:
                 # The legacy xlsx is the tradable universe of the ATLAS strategies:
                 # deprecated names go to the store only, never to the workbook.
                 self._xlsx_exclude = set(reg.deprecated_tickers())
+                # Active names with fetch cut stay in the workbook as empty (N/A) columns.
+                self._xlsx_placeholders = [m.ticker for m in reg.members if m.active and not m.fetch]
                 return tickers
             logger.warning(
                 f"Universe '{self.universe}' not in the share registry; "
@@ -323,6 +325,7 @@ class ATLASBloombergLoader:
         """Registry on the share is re-read at every run (source of truth)."""
         self._tickers_from_registry = False
         self._xlsx_exclude: set[str] = set()
+        self._xlsx_placeholders: list[str] = []
         try:
             if registry.exists(self.universe, self.config):
                 return registry.load(self.universe, self.config)
@@ -821,6 +824,11 @@ class ATLASBloombergLoader:
                     # a daily return is not a level: forward-filling it would invent returns
                     results[sheet_name] = aligned if sheet_name in self.no_ffill_fields else aligned.ffill()
 
+        for sheet_name, df in results.items():
+            missing = [t for t in self._xlsx_placeholders if t not in df.columns]
+            if missing and not df.empty:
+                results[sheet_name] = df.reindex(columns=[*df.columns, *missing])
+
         # Extract benchmark if configured
         benchmark_df = pd.DataFrame()
         if self.benchmark:
@@ -858,6 +866,7 @@ class ATLASBloombergLoader:
                                       self.config["parameters"],
                                       tickers=[t for t in self.tickers if t not in self._xlsx_exclude],
                                       only_listed=bool(self._xlsx_exclude),
+                                      empty_columns=self._xlsx_placeholders,
                                       no_ffill=self.no_ffill_fields,
                                       config=self.config, test=self.test)
             self._manifest.xlsx = {**info, "seconds": round(time.monotonic() - t0, 2), "source": "store"}
