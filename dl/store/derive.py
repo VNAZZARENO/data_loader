@@ -63,6 +63,9 @@ def derive(universe: str, config: dict | None = None, test: bool = False, since_
     currency_fields = set(cfg.get("currency_fields", DEFAULT_CURRENCY_FIELDS))
     ov = (config or {}).get("universe_overrides", {}).get(registry_universe or universe, {})
     fx_layer = ov.get("fx_layer", True)
+    # stale_tail: false pour un univers sans titres morts (series macro, dont les mensuelles restent
+    # plates entre deux publications et seraient masquees a tort).
+    stale_tail = ov.get("stale_tail", True)
 
     names = layout.list_fields(universe, "raw", config, test)
     if not names:
@@ -70,7 +73,8 @@ def derive(universe: str, config: dict | None = None, test: bool = False, since_
     refdata = reader.read_refdata(universe, config, test)
     raw_price = reader._read_dir(layout.field_dir(universe, "raw", "price", config, test)) if "price" in names else pd.DataFrame()
     holidays = ffilled_holidays(raw_price)
-    stale = stale_tail_mask(raw_price.loc[~raw_price.index.isin(holidays)]) if not raw_price.empty else None
+    stale = (stale_tail_mask(raw_price.loc[~raw_price.index.isin(holidays)])
+             if stale_tail and not raw_price.empty else None)
     fx = reader.read_fx(config=config, test=test) if fx_layer else pd.DataFrame()
 
     def keep(df):

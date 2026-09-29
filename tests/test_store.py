@@ -124,6 +124,24 @@ def test_derive_layers_end_to_end(share):
     assert idx[10] not in si.index and si["DEAD FP"].notna().all()
 
 
+def test_derive_stale_tail_off_keeps_flat_monthly_series(share):
+    """Univers macro : une serie mensuelle plate depuis sa derniere publication n'est pas masquee."""
+    idx = pd.bdate_range("2025-01-01", periods=30)
+    rng = np.random.default_rng(2)
+    px = pd.DataFrame({t: 100 + rng.normal(size=30).cumsum() for t in ["CO1 Comdty", "TZT1 Comdty"]}, index=idx)
+    px["CPI YOY Index"] = 2.9
+    px.loc[idx[5]:, "CPI YOY Index"] = 3.1                      # publication, puis plat jusqu'a la fin
+    writer.upsert_long("m", "raw", "price", px)
+    cfg = {"universe_overrides": {"m": {"fx_layer": False, "stale_tail": False}}}
+    derive.derive("m", cfg)
+    clean = store.read("m", "price", layer="clean")
+    assert clean["CPI YOY Index"].last_valid_index() == idx[-1]
+    assert store.fields("m", "fx_eur") == []
+    writer.upsert_long("d", "raw", "price", px)                 # defaut : queue figee masquee
+    derive.derive("d", {"universe_overrides": {"d": {"fx_layer": False}}})
+    assert store.read("d", "price", layer="clean")["CPI YOY Index"].last_valid_index() == idx[5]
+
+
 def test_legacy_xlsx_roundtrip_matches_loader_layout(share, tmp_path):
     px = _wide("2025-01-01", "2025-01-31")
     eps = px.iloc[::5] * 0 + 3.0                                  # champ creux

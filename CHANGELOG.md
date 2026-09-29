@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-29
+
+### Added
+- **Univers `macro`** (registre, 40 membres) : univers unique du projet pergam-tools/Macro, marchés
+  (swaps d'inflation, énergie, matières agricoles, change, breakevens) et séries ECO avec leur consensus
+  (`BN_SURVEY_*`, `ACTUAL_RELEASE`, `ECO_RELEASE_DT`). `global_macro` reste indépendant ;
+  `macro_inflation` est à couper après le premier run complet de `macro`.
+- `universe_overrides.<u>.sparse_fields` : champs attendus sur une partie des tickers seulement ; leurs
+  absents restent listés au manifeste (`sparse_fields`) sans rendre le run `partial` (un champ vide
+  partout le rend toujours `partial`).
+- `universe_overrides.<u>.stale_tail: false` : la couche `clean` ne masque plus la queue « figée » des
+  prix, pour les séries mensuelles qui restent plates entre deux publications.
+
 ## 2026-09-18
 
 ### Added

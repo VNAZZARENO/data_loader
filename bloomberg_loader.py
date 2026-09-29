@@ -164,6 +164,7 @@ class ATLASBloombergLoader:
             n_requested=len(self.tickers),
             registry_rev=getattr(self._registry_entry, "rev", None),
             ticker_source="registry" if self._tickers_from_registry else "csv",
+            sparse_fields=sorted(overrides.get("sparse_fields", [])),
         )
 
         # Daily incremental mode: load existing data and override date range

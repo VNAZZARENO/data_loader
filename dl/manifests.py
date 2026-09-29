@@ -47,6 +47,9 @@ class RunManifest:
     clean_version: int | None = None
     xlsx: dict = field(default_factory=dict)
     requests_processed: list[str] = field(default_factory=list)
+    # Champs creux : attendus sur une partie des tickers seulement (ex. consensus ECO dans un univers
+    # mixte) ; leurs absents restent listes mais ne rendent pas le run "partial".
+    sparse_fields: list[str] = field(default_factory=list)
     error: str | None = None
 
     def finish(self, error: str | None = None) -> None:
@@ -54,7 +57,8 @@ class RunManifest:
         self.error = error
         if error:
             self.status = "failed"
-        elif any(r.failed or r.missing or r.n_returned == 0 for r in self.per_field.values()):
+        elif any(r.failed or (r.missing and f not in self.sparse_fields) or r.n_returned == 0
+                 for f, r in self.per_field.items()):
             self.status = "partial"
         else:
             self.status = "ok"

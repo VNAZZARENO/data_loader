@@ -179,6 +179,32 @@ def test_all_nan_column_is_reported_missing(cfg_path, fake_blp, share):
     assert rep["missing"] == [target] and rep["n_returned"] == len(loader.tickers) - 1
 
 
+def test_sparse_field_missing_keeps_run_ok(cfg_path, fake_blp, share):
+    """Univers mixte : un champ ECO absent sur les tickers de marche ne degrade pas le statut."""
+    cfg = yaml.safe_load(cfg_path.read_text())
+    cfg["universe_overrides"] = {"sx5e": {"sparse_fields": ["EPS"]}}
+    cfg_path.write_text(yaml.safe_dump(cfg))
+    loader = _loader(cfg_path, fake_blp)
+    target = loader.tickers[1] + " Equity"
+    real = fake_blp._series
+    fake_blp._series = lambda t, f, idx: real(t, f, idx) * (float("nan") if (t, f) == (target, "IS_EPS") else 1)
+    loader.run()
+    m = _latest(share)
+    assert m["per_field"]["EPS"]["missing"] == [target]
+    assert m["sparse_fields"] == ["EPS"] and m["status"] == "ok"
+
+
+def test_sparse_field_empty_everywhere_is_still_partial(cfg_path, fake_blp, share):
+    cfg = yaml.safe_load(cfg_path.read_text())
+    cfg["universe_overrides"] = {"sx5e": {"sparse_fields": ["EPS"]}}
+    cfg_path.write_text(yaml.safe_dump(cfg))
+    loader = _loader(cfg_path, fake_blp)
+    real = fake_blp._series
+    fake_blp._series = lambda t, f, idx: real(t, f, idx) * (float("nan") if f == "IS_EPS" else 1)
+    loader.run()
+    assert _latest(share)["status"] == "partial"
+
+
 @pytest.mark.parametrize("from_store", [False, True])
 def test_no_ffill_fields_are_aligned_without_forward_fill(cfg_path, fake_blp, share, tmp_path, from_store):
     cfg = yaml.safe_load(cfg_path.read_text())
@@ -265,3 +291,13 @@ def test_active_ticker_with_fetch_off_stays_in_xlsx_as_empty_column(cfg_path, fa
         df = pd.read_excel(out, sheet_name=sheet, index_col=0)
         assert list(df.columns) == ["AAA FP", "BBB GY"]
         assert df["BBB GY"].isna().all() and df["AAA FP"].notna().any()
+
+
+def test_macro_universe_override_is_consistent():
+    """Config reelle : l'univers macro declare ses champs ECO creux et coupe fx et queue figee."""
+    from pathlib import Path
+    cfg = yaml.safe_load((Path(bl.__file__).parent / "config" / "atlas_config.yaml").read_text(encoding="utf-8"))
+    ov = cfg["universe_overrides"]["macro"]
+    assert ov["fields"]["price"] == "PX_LAST" and ov["fields"]["survey_median"] == "BN_SURVEY_MEDIAN"
+    assert set(ov["sparse_fields"]) == set(ov["fields"]) - {"price"}
+    assert ov["fx_layer"] is False and ov["stale_tail"] is False and ov["ticker_suffix"] == ""
