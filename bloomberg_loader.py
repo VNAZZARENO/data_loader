@@ -11,9 +11,15 @@ Usage:
     source .venv/bin/activate && python3 bloomberg_loader.py --dry-run
     source .venv/bin/activate && python3 bloomberg_loader.py --universe nky --dry-run
     source .venv/bin/activate && python3 bloomberg_loader.py --universe spx --today
-    source .venv/bin/activate && python3 bloomberg_loader.py --universe jp --daily
+    source .venv/bin/activate && python3 bloomberg_loader.py --universe sxxr --daily
     source .venv/bin/activate && python3 bloomberg_loader.py --agents squeeze --universe sxxr
-    source .venv/bin/activate && python3 bloomberg_loader.py --agents all --universe sxxr --dry-run
+
+Un univers = une liste de champs = une passe par soir : les champs d'un univers se
+declarent dans universe_overrides.<u>.fields (sinon `fields` par defaut) et la passe
+`--universe <u> --daily` les collecte tous dans le store univers/store/<u>. Un champ
+en retard (collecte interrompue, champ longtemps collecte a la main par un profil)
+est rattrape depuis sa derniere date connue. `--agents <profil>` reste une extraction
+ponctuelle de recherche, qui ecrit un classeur a part et alimente le meme store.
 """
 
 import argparse
@@ -70,6 +76,7 @@ class ATLASBloombergLoader:
     ):
         self._blp = blp_module
         self._field_reports: dict[str, manifests.FieldReport] = {}
+        self._earliest_written: str | None = None   # plus ancienne date ecrite au store ce run
         self.dry_run = dry_run
         self.test = test
         self.daily = daily
@@ -227,7 +234,11 @@ class ATLASBloombergLoader:
         No flag: existing behavior (universe override or default fields).
         """
         if not self.agents:
-            return universe_overrides.get("fields", self.config["fields"])
+            if "fields" in universe_overrides:
+                fields = universe_overrides["fields"]
+                logger.info(f"Universe '{self.universe}': {len(fields)} field(s) from its own field list")
+                return fields
+            return self.config["fields"]
 
         agent_profiles = self.config.get("agents", {})
         available_agents = list(agent_profiles.keys())
@@ -404,7 +415,10 @@ class ATLASBloombergLoader:
     def _fetch_groups(self, alias: str) -> list[tuple[list[str], str]]:
         """[(tickers, start_date)]. With the store, a ticker never seen for this field
         (index joiner, new field) is backfilled from the full start date instead of
-        only from today -- the legacy --daily gave joiners no history."""
+        only from today -- the legacy --daily gave joiners no history. A ticker whose
+        last value for this field is older than the run's start date (collection of
+        the field interrupted, field previously fetched by hand through a profile,
+        failed batch) is caught up from its own watermark, so a gap never persists."""
         if not self.store_enabled or self.dry_run:
             return [(self.tickers, self.start_date)]
         wm = self._watermarks().get(alias, {})
@@ -416,8 +430,14 @@ class ATLASBloombergLoader:
             logger.info(f"  New field '{alias}' for this store: backfill from {self.full_start_date}")
             return [(self.tickers, self.full_start_date)]
         groups = []
-        if known:
-            groups.append((known, self.start_date))
+        current = [t for t in known if wm[t] >= self.start_date]
+        behind = [t for t in known if wm[t] < self.start_date]
+        if current:
+            groups.append((current, self.start_date))
+        if behind:
+            start = min(wm[t] for t in behind)
+            logger.info(f"  {len(behind)} ticker(s) behind for '{alias}': catch-up from {start}")
+            groups.append((behind, start))
         if new:
             logger.info(f"  {len(new)} ticker(s) without history for '{alias}': backfill from {self.full_start_date}")
             groups.append((new, self.full_start_date))
@@ -611,7 +631,11 @@ class ATLASBloombergLoader:
                                          config=cfg, test=test)
             self._update_refdata()
             self._update_fx()
-            since = None if not self.daily else int(str(self.start_date)[:4])
+            # Derived layers are rewritten from the oldest raw date touched this run: a
+            # catch-up of a field left behind may reach back before the run's start date.
+            since = None
+            if self.daily:
+                since = int(str(min(filter(None, (self.start_date, self._earliest_written))))[:4])
             rep = store_derive.derive(u, cfg, test, since_year=since, registry_universe=self.universe)
             self._manifest.fx_missing = rep.get("fx_missing", [])
             self._manifest.clean_version = rep.get("clean_version")
@@ -628,6 +652,10 @@ class ATLASBloombergLoader:
         try:
             store_writer.upsert_long(self.store_universe, "raw", alias, df, config=self.config, test=self.test)
             store_writer.update_state(self.store_universe, alias, df, self.config, self.test)
+            first = df.dropna(how="all").index.min()
+            if first is not None and not pd.isna(first):
+                first = pd.Timestamp(first).date().isoformat()
+                self._earliest_written = min(filter(None, (self._earliest_written, first)))
         except Exception as e:
             if self.xlsx_from_store:
                 raise
@@ -916,8 +944,10 @@ def main():
     parser.add_argument(
         "--agents",
         default=None,
-        help="Agent field profile (default, squeeze, all). "
-             "Selects which Bloomberg fields to extract.",
+        help="Field profile for a one-off research extraction (conviction, squeeze, "
+             "all): writes ATLAS_data_<universe>_static_<profile>.xlsx and feeds the "
+             "same store. Without it, the universe's own field list "
+             "(universe_overrides.<u>.fields, else 'fields') is extracted.",
     )
     parser.add_argument(
         "--dry-run",

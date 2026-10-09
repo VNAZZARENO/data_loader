@@ -24,6 +24,9 @@ source .venv/bin/activate && python3 bloomberg_loader.py
 # Specific universe
 source .venv/bin/activate && python3 bloomberg_loader.py --universe nky
 
+# Nightly pass: every field of the universe, from the last known date to today
+source .venv/bin/activate && python3 bloomberg_loader.py --universe sxxr --daily
+
 # Dry run (validate config, no API calls)
 source .venv/bin/activate && python3 bloomberg_loader.py --universe spx --dry-run
 
@@ -36,11 +39,32 @@ source .venv/bin/activate && python3 bloomberg_loader.py --universe sxxr --updat
 source .venv/bin/activate && python3 bloomberg_loader.py --universe sxxr --update-universe --dry-run
 ```
 
+### Champs d'un univers
+
+Règle d'exploitation : **un univers = une liste de champs = une passe par soir**.
+La liste se déclare dans `universe_overrides.<univers>.fields` (sinon `fields`
+par défaut : price, Pxtobook, EPS) et la passe quotidienne la collecte en entier :
+
+```bash
+python3 bloomberg_loader.py --universe sxxr --daily
+```
+
+Le store `univers/store/<univers>` est unique quel que soit le profil. Un champ
+ajouté à la liste est remonté depuis `start_date` à sa première passe ; un champ
+dont la collecte a été interrompue (ou longtemps faite à part) est rattrapé depuis
+sa dernière date connue, ticker par ticker (filigranes du store). `--agents <profil>`
+est une extraction ponctuelle de recherche : elle écrit
+`ATLAS_data_<univers>_static_<profil>.xlsx` et alimente le même store, mais aucune
+passe planifiée n'en dépend. `sxxr` collecte ainsi `price`, `Pxtobook`, `EPS`
+(shadows V5/V6) et `shares_out`, `div_yield`, `announcement_dt` (shadow `atlas_gbt_v1`).
+
 ### CLI flags
 
 | Flag | Description |
 |------|-------------|
 | `--universe` | Ticker universe to load (default: `sxxr`) |
+| `--daily` | Incremental pass: from the last known date to today, stale fields caught up from their own watermark |
+| `--agents` | One-off research profile (`conviction`, `squeeze`, `all`): separate workbook, same store. Omit it for the nightly pass |
 | `--dry-run` | Validate config and print plan without API calls |
 | `--start-date` | Override start date (e.g. `2013-01-01`) |
 | `--end-date` | Override end date (e.g. `2026-02-04`) |

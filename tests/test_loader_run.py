@@ -301,3 +301,55 @@ def test_macro_universe_override_is_consistent():
     assert ov["fields"]["price"] == "PX_LAST" and ov["fields"]["survey_median"] == "BN_SURVEY_MEDIAN"
     assert set(ov["sparse_fields"]) == set(ov["fields"]) - {"price"}
     assert ov["fx_layer"] is False and ov["stale_tail"] is False and ov["ticker_suffix"] == ""
+
+
+def test_universe_field_list_drives_the_run_without_profile(cfg_path, fake_blp):
+    # Un univers = une liste de champs : la passe sans --agents collecte la liste de
+    # l'univers ; un profil reste une extraction a part qui alimente le meme store.
+    cfg = yaml.safe_load(cfg_path.read_text())
+    cfg["universe_overrides"] = {"sx5e": {"fields": {"price": "PX_LAST", "EPS": "IS_EPS", "shares_out": "EQY_SH_OUT"}}}
+    cfg["agents"] = {"default": {"fields": {"price": "PX_LAST"}},
+                     "conviction": {"fields": {"price": "PX_LAST", "shares_out": "EQY_SH_OUT", "short_int": "SHORT_INT"}}}
+    cfg_path.write_text(yaml.safe_dump(cfg))
+    nightly = _loader(cfg_path, fake_blp)
+    assert sorted(nightly.fields) == ["EPS", "price", "shares_out"]
+    assert nightly.output_path.endswith("ATLAS_data_sx5e_static.xlsx")
+    adhoc = _loader(cfg_path, fake_blp, agents="conviction")
+    assert sorted(adhoc.fields) == ["price", "shares_out", "short_int"]
+    assert adhoc.output_path.endswith("ATLAS_data_sx5e_static_conviction.xlsx")
+    assert adhoc.store_universe == nightly.store_universe == "sx5e"
+
+
+def test_field_left_behind_is_caught_up_from_its_watermark(store_cfg, fake_blp, share):
+    from dl import store
+    cfg = yaml.safe_load(store_cfg.read_text())
+    cfg["parameters"]["start_date"] = "2024-06-03"
+    base = dict(cfg["fields"])                                  # price, EPS
+    # J0 : passe complete avec shares_out (comme le profil conviction jusqu'au 07/08/2026)
+    cfg["fields"] = {**base, "shares_out": "EQY_SH_OUT"}
+    store_cfg.write_text(yaml.safe_dump(cfg))
+    bl.ATLASBloombergLoader(str(store_cfg), universe="sx5e", end_date_override="2024-11-29",
+                            blp_module=fake_blp).run()
+    # puis des passes quotidiennes sans shares_out : le champ reste fige au 29/11
+    cfg["fields"] = base
+    store_cfg.write_text(yaml.safe_dump(cfg))
+    loader = bl.ATLASBloombergLoader(str(store_cfg), universe="sx5e", daily=True, blp_module=fake_blp)
+    loader.end_date = "2025-01-31"
+    loader.run()
+    assert store.read("sx5e", "shares_out").index.max() == pd.Timestamp("2024-11-29")
+    # shares_out rejoint la liste de champs : rattrape depuis son filigrane, pas depuis la veille
+    cfg["fields"] = {**base, "shares_out": "EQY_SH_OUT"}
+    store_cfg.write_text(yaml.safe_dump(cfg))
+    fake_blp.calls.clear()
+    loader = bl.ATLASBloombergLoader(str(store_cfg), universe="sx5e", daily=True, blp_module=fake_blp)
+    loader.end_date = "2025-02-28"
+    loader.run()
+    starts = {c[2][0]: c[3] for c in fake_blp.calls if c[0] == "bdh" and "Equity" in c[1][0]}
+    assert starts["PX_LAST"] == "2025-01-31"
+    assert starts["EQY_SH_OUT"] == "2024-11-29"
+    raw = store.read("sx5e", "shares_out")
+    assert raw.loc["2024-12-02":"2025-02-28"].notna().all().all()
+    # couche derivee reecrite depuis la plus ancienne date ecrite (2024), pas depuis l'annee de la passe
+    clean = store.read("sx5e", "shares_out", layer="clean")
+    assert clean.loc["2024-12-02":"2025-01-31"].notna().all().all()
+    assert _latest(share)["status"] == "ok"

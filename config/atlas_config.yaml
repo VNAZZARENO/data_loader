@@ -27,13 +27,18 @@ bloomberg:
     Calendar: '5D'
     Days: N
     Fill: P
-# Default fields (used when no --agents flag is specified)
+# Champs par defaut : univers sans liste de champs propre (universe_overrides.<u>.fields)
+# et sans --agents. Regle d'exploitation : UN UNIVERS = UNE LISTE DE CHAMPS = UNE PASSE
+# PAR SOIR ; la liste d'un univers se declare dans universe_overrides.<u>.fields, pas
+# dans un profil d'agent.
 fields:
   price: PX_LAST
   Pxtobook: PX_TO_BOOK_RATIO
   EPS: IS_EPS
 
-# Agent-specific field profiles (selected via --agents)
+# Profils de champs (--agents <nom>) : extractions PONCTUELLES de recherche et profil
+# par defaut des univers crees dans le dashboard (fields_profile). Aucune passe
+# planifiee n'en depend : les champs collectes chaque soir sont ceux de l'univers.
 agents:
   default:
     fields:
@@ -44,6 +49,9 @@ agents:
   # (recherche QR/ATLAS atlas_conviction : revisions de consensus, PEAD,
   # shareholder yield). Sortie dans ATLAS_data_{universe}_static_conviction.xlsx
   # (fichier PROPRE — n'ecrase jamais le _static principal).
+  # 2026-10-09 : shares_out, div_yield et announcement_dt sont passes dans la liste
+  # de champs de l'univers sxxr (universe_overrides.sxxr.fields) ; ce profil n'est
+  # plus necessaire a la passe du soir et ne sert qu'aux extractions a la demande.
   # NOTE terminal : valider BEST_* via --dry-run/--test avant la premiere
   # extraction complete (periode fiscale par defaut de BEST_EPS/BEST_SALES =
   # 1BF ; ce loader a champs plats ne passe pas BEST_FPERIOD_OVERRIDE).
@@ -114,6 +122,25 @@ universes:
     - euro_credit
     - option_europe
 universe_overrides:
+  # sxxr (STOXX 600) : liste de champs de l'univers, collectee en entier par la passe
+  # du soir (`--universe sxxr --daily`, sans --agents) dans le store unique
+  # univers/store/sxxr et le classeur ATLAS_data_sxxr_static.xlsx. price, Pxtobook
+  # et EPS nourrissent les shadows V5/V6 ; shares_out, div_yield et announcement_dt
+  # sont les entrees declarees du shadow atlas_gbt_v1 (capitalisation, rendement de
+  # dividende ; announcement_dt gele mais sans feature a ce jour, YYYYMMDD en BDH
+  # quotidien). Ces trois champs etaient collectes a part par le profil `conviction`,
+  # arrete le 2026-08-07 : la premiere passe apres ce changement rattrape le trou
+  # depuis leur derniere date connue (filigranes du store). div_yield est absent des
+  # titres sans dividende : declare sparse pour ne pas rendre chaque run "partial".
+  sxxr:
+    fields:
+      price: PX_LAST
+      Pxtobook: PX_TO_BOOK_RATIO
+      EPS: IS_EPS
+      shares_out: EQY_SH_OUT
+      div_yield: EQY_DVD_YLD_12M
+      announcement_dt: ANNOUNCEMENT_DT
+    sparse_fields: [div_yield]
   global_macro:
     ticker_suffix: ''
     fx_layer: false   # actifs heterogenes : pas de couche fx_eur

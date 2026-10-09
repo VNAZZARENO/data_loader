@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-10-09
+
+### Changed
+- **Un univers = une liste de champs = une passe par soir.** La liste de champs d'un
+  univers se déclare dans `universe_overrides.<u>.fields` et la passe du soir
+  (`--universe <u> --daily`, sans `--agents`) la collecte en entier. `sxxr` passe de
+  3 à 6 champs : `shares_out` (EQY_SH_OUT), `div_yield` (EQY_DVD_YLD_12M) et
+  `announcement_dt` (ANNOUNCEMENT_DT), que le profil `conviction` collectait à part
+  (arrêté le 07/08/2026), sont les entrées déclarées du shadow ATLAS `atlas_gbt_v1`.
+  `div_yield` est déclaré `sparse_fields` (titres sans dividende). Les profils `agents.*` restent pour les extractions ponctuelles de
+  recherche et comme `fields_profile` des univers du dashboard ; aucune passe
+  planifiée n'en dépend plus.
+- `--daily` : un ticker dont la dernière valeur d'un champ est antérieure au début de
+  la passe est rattrapé depuis son propre filigrane (champ longtemps collecté à part,
+  collecte interrompue, lot en échec) ; auparavant seuls les tickers jamais vus
+  étaient remontés et un trou restait à vie. Les couches dérivées (`fx_eur`, `clean`)
+  sont réécrites depuis la plus ancienne date écrite au store pendant la passe, pas
+  seulement depuis l'année de son début.
+
+**À faire sur le PC Bloomberg** : `git pull`, puis la passe du soir habituelle
+`python bloomberg_loader.py --universe sxxr --daily`. La première passe rattrape
+`shares_out`, `div_yield` et `announcement_dt` du 07/08/2026 à aujourd'hui (une
+poignée de requêtes BDH) et ajoute trois onglets au classeur `ATLAS_data_sxxr_static.xlsx` ; le gel V6/GBT
+ne copie que price, Pxtobook, EPS et benchmark, donc sans effet sur les shadows.
+Vérifier dans le log la ligne `ticker(s) behind for 'shares_out': catch-up from
+2026-08-07` et, sur le dashboard, la fraîcheur des deux champs. Si la tâche planifiée
+passe `--agents`, le retirer : le profil ne couvre pas Pxtobook ni EPS.
+
 ## 2026-09-29
 
 ### Added
