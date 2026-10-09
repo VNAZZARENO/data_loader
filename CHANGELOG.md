@@ -24,6 +24,11 @@
   Le contrôle initial signale : les bras conviction de PSC et PBH attendent cinq champs
   que les passes `igv` et `pbh` ne collectent pas ; `stoxx600_v2` et les screeners PEQ
   sont en échec ; six univers n'ont aucun consommateur.
+- **Dashboard** : colonne « Consommateurs » dans la liste des univers (pastilles par statut,
+  libellés en info-bulle), tuiles « Consommateur en echec » et « Sans consommateur », onglet
+  Consommateurs sur chaque univers (nature, statut, horaire, artefact, champs, notes,
+  avertissements sur les champs non collectés), API `GET /api/universes/<u>/consumers` et
+  champ `consumers` dans `/api/universes`. Prend effet au redémarrage du service.
 
 ### Changed
 - **Un univers = une liste de champs = une passe par soir.** La liste de champs d'un

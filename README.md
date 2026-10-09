@@ -74,8 +74,10 @@ python -m dl.consumers check    # anomalies : univers inconnu, champ non collect
 python -m dl.consumers matrix   # matrice univers -> consommateurs
 ```
 
-Le fichier est tenu à la main : tout nouveau lecteur d'une sortie du DataLoader s'y
-déclare, tout arrêt y change le statut. Origine : audit univers → consommateurs du
+Le dashboard affiche ces consommateurs : colonne de la liste des univers et onglet
+« Consommateurs » de chaque univers (avertissement quand un champ attendu n'est pas
+collecté). Le fichier est tenu à la main : tout nouveau lecteur d'une sortie du DataLoader
+s'y déclare, tout arrêt y change le statut. Origine : audit univers → consommateurs du
 2026-10-09 (`docs/2026-10-09-audit-univers-consommateurs.md`).
 
 ### CLI flags
