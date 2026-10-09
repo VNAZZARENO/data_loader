@@ -46,7 +46,9 @@ Autres faits : une demande `index_members_hist` (sxxr, 55 fins de trimestre) att
 le 08/10 18:32 et sera dépilée par la prochaine passe ; le dashboard (port 7016) tourne sans
 relance automatique du watchdog ; un second collecteur Bloomberg, hors dépôt
 (`Stagiaires/Vincent N/data/bloomberg_data_extraction.py`, xbbg), réécrit les CSV legacy
-`data/<u>/*.csv` vers 17:51, juste avant la passe `sxxr`.
+`data/<u>/*.csv` vers 17:51, juste avant la passe `sxxr` (569 tickers, hors euro convertis en
+EUR : ce n'est pas une copie de la feuille `price` ; la version du script qui tourne n'a pas
+été localisée).
 
 ## 2. Carte univers → consommateurs
 
@@ -61,7 +63,7 @@ ponctuel, dormant. Preuves complètes dans `config/consumers.yaml`.
 | Attribution (service 7008) | 18:00 | xlsx | benchmark | actif, lit avant l'écriture : J-1 |
 | SecretProject TopSelection | 14h-18h et 20h | xlsx | price, EPS, Pxtobook, benchmark | en échec depuis le 22/09 (ordre des colonnes) |
 | ATLAS V4 `stoxx600` | 18:30 | xlsx | price, EPS, Pxtobook, benchmark | actif |
-| Cluster_Spread_MR (screener) | 18:30 | xlsx | price, Pxtobook, EPS | actif, as-of figé au 24/06 par config |
+| Cluster_Spread_MR (screener) | 18:30 | xlsx | price | actif, mais as-of figé au 24/06 par sa propre config (76 mails identiques) |
 | ATLAS V5 `stoxx600_v5` | 18:45 | xlsx + refdata | + sector | actif |
 | ATLAS V6 `stoxx600_v6` | 19:15 | xlsx gelé + refdata gelé | price, EPS, Pxtobook, benchmark, sector, currency | actif |
 | ATLAS `atlas_gbt_v1` | 19:45 | xlsx gelé + store clean + refdata | + shares_out, div_yield, announcement_dt | actif, champs du store figés au 07/08 |
@@ -172,8 +174,10 @@ DerivativesMonitor, Compass et les autres outils du portail n'utilisent pas le D
    le catalogue ATLAS macro refuse toute colonne nouvelle ou manquante de `global_macro` ;
    le gel V6 et GBT refuse tout changement de colonnes du classeur `sxxr` (appliquer la
    demande `index_members_hist` en attente changera la composition : prévoir une révision
-   explicite des journaux) ; un client API inconnu interroge `series?field=PX_LAST` (alias
-   invalide, réponse 200 vide).
+   explicite des journaux). Les clients de l'API sont identifiés par le log du portail : Vigie
+   et ATS depuis le lab, des sessions Claude depuis le poste prod (dont un appel
+   `series?field=PX_LAST`, alias invalide, réponse 200 vide), trois postes du LAN pour le
+   dashboard. Vigie et ATS épinglent le certificat du portail : le régénérer coupe leur accès.
 
 ## 4. Le rattachement
 
@@ -187,7 +191,21 @@ consommateurs sur la page de chaque univers du dashboard et refuser la coupure d
 ou d'un champ qui a un consommateur `actif` (à faire après la fin des travaux en cours sur
 le dashboard).
 
-## 5. Vérification
+## 5. Résultat des vérifications
 
-Section complétée avec les retours des trois vérificateurs : voir « Résultat des
-vérifications » ci-dessous.
+| Passe | Liens ou affirmations | Confirmés | Corrigés | Réfutés |
+|---|---|---|---|---|
+| ATLAS (19 liens) | A1-A19 | 16 | 3 (rôle et chemins du GBT, chaîne de prix PSC, nature du CSV legacy) | 0 |
+| Producteurs (16 affirmations) | P1-P16 | 11 | 5 (import du 18/09, créneaux exacts des runs, screeners PEQ, lecteurs de `jp`, mentions de `ATLAS_data.xlsx`) | 0 |
+| pergam-tools et autres dépôts (20 liens) | T1-T20 | 15 | 5 (clients et période Vigie, feuilles lues par v3, échec TopSelection, feuilles lues par Cluster, producteur des CSV) | 0 |
+
+Aucune citation fausse ; les corrections précisent des chemins, des horaires ou des feuilles et
+ont été reportées dans `config/consumers.yaml` et dans ce document. Les oublis signalés par
+les vérificateurs (TopSelection en échec, lecteurs secondaires du classeur `sxxr` dans les
+crons ATLAS, scripts macro, tests sur données réelles, lecteurs des CSV legacy, clients API
+identifiés par le log du portail) sont intégrés. Restent invérifiables depuis cette machine :
+la définition des tâches planifiées du poste Bloomberg, le verrou SMB au moment des deux
+échecs d'écriture, le calendrier interne de Vigie sur le lab.
+
+Fichiers de travail (listes de liens et verdicts) : scratchpad de session
+`audit/links_atlas.json`, `audit/links_tools.json`, `audit/claims_producers.md`.

@@ -161,7 +161,7 @@ consumers:
     reads:
       - {universe: sxxr, artefact: xlsx, fields: [EPS, Pxtobook]}
     evidence: ["Research/run_trading_pipeline.py:203", "Research/run_trading_pipeline.py:331-344"]
-    notes: "Ouvre le classeur de 18:05:03 a 18:05:19 (13 a 16 s) : les deux echecs WinError 5 du loader (29/09 18:05:13, 01/10 18:05:15) tombent dans cette fenetre ; le loader ne reessaie que 9 s. Lit la donnee de la veille des que la passe finit apres 18:05."
+    notes: "Ouvre le classeur de 18:05:03 a 18:05:19 (13 a 16 s) : les deux echecs WinError 5 du loader (29/09 18:05:13, 01/10 18:05:15) tombent dans cette fenetre ; le loader ne reessaie que 9 s. Lit la donnee de la veille des que la passe finit apres 18:05. Les prix viennent du CSV legacy Stagiaires (config/system.yaml:4), pas du DataLoader."
   secretproject_topselection:
     label: "SecretProject TopSelection"
     kind: prod
@@ -172,7 +172,7 @@ consumers:
     reads:
       - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark]}
     evidence: ["config.yaml:6", "data/atlas_reader.py:38-53", "data/atlas_reader.py:126", "logs/daily_pipeline.log:120222"]
-    notes: "En echec a chaque passage depuis le 22/09/2026 : les 110 colonnes ajoutees au classeur sxxr le 21/09 (composition du registre) ne sont pas triees et atlas_reader.py:126 fait un reindex(method='ffill') qui exige un ordre croissant (ValueError index must be monotonic). Correction cote lecteur (trier les colonnes) : le DataLoader ne doit pas reordonner le classeur, le gel V6/GBT compare l'ordre des colonnes. Lit aussi le classeur a 18:05 pendant l'ecriture de la passe du soir."
+    notes: "En echec a chaque passage depuis le 22/09/2026 : les 110 colonnes ajoutees au classeur sxxr le 21/09 (composition du registre) ne sont pas triees et atlas_reader.py:126 fait un reindex(method='ffill') qui exige un ordre croissant (ValueError index must be monotonic). Correction cote lecteur (trier les colonnes) : le DataLoader ne doit pas reordonner le classeur, le gel V6/GBT compare l'ordre des colonnes. Lit aussi le classeur a 18:05 pendant l'ecriture de la passe du soir. Le second cron (:15, worst5 et ls_screen) passe mais sur un top 5 fige au 18/09."
   secretproject_psc_incumbent:
     label: "SecretProject PSC incumbent (lit ET reecrit le classeur igv)"
     kind: cron
@@ -255,7 +255,7 @@ consumers:
       - {universe: sxxr, artefact: api, fields: [price]}
       - {universe: igv, artefact: api, fields: [price]}
     evidence: ["config.py:43-45", "donnees/sources/dataloader.py:52-56", "donnees/facteurs.py:27-32"]
-    notes: "Premier client de l'API du dashboard (environ 1050 appels series du 22/09 au 09/10/2026)."
+    notes: "Premier client de l'API du dashboard : 1 045 appels series depuis le lab les 05, 07 et 08/10/2026 ; sxxr et igv viennent de la table instrument de vigie.db (23 et 3 instruments), macro et global_macro des facteurs. Epingle le certificat du portail (MCP/portal-ca.pem) : le regenerer coupe l'acces."
   pergamtools_ats_fiches:
     label: "ATS fiches (worker sur le lab)"
     kind: service
@@ -266,7 +266,7 @@ consumers:
     reads:
       - {universe: global_macro, artefact: api, fields: [price], via: "routes runs et series, layer=raw"}
     evidence: ["fiches/cours.py:155", "fiches/cours.py:162-179", "fiches/facteurs.json:223"]
-    notes: "Six tickers de taux ; exclut la journee provisoire ; panne = facteurs non mesures."
+    notes: "Six tickers de taux ; exclut la journee provisoire ; panne = facteurs non mesures. Epingle le certificat du portail (certs/ca-bundle.pem)."
   # ------------------------------------------------------------ QuickResearch et reporting
   quickresearch_cluster_spread_mr:
     label: "QuickResearch Cluster_Spread_MR (screener)"
