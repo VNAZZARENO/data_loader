@@ -54,9 +54,9 @@ consumers:
     reads:
       - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark], via: "copie gelee state/shadow_gbt_v1/inputs"}
       - {universe: sxxr, artefact: store, fields: [shares_out, div_yield, announcement_dt], via: "layer=clean, copie append-only"}
-      - {universe: sxxr, artefact: refdata, fields: [sector, currency]}
-    evidence: ["strategies/atlas_gbt_v1/strategy.yaml:19-24", "src/atlas_gbt/inputs.py:43-77", "src/atlas_gbt/inputs.py:103-144"]
-    notes: "Champs du store figes au 07/08/2026 jusqu'au rattrapage de la passe sxxr (liste de champs du 09/10/2026)."
+      - {universe: sxxr, artefact: refdata, fields: [sector, currency], via: "copie gelee, faite une seule fois a l'initialisation"}
+    evidence: ["strategies/atlas_gbt_v1/strategy.yaml:19-24", "src/atlas_gbt/inputs.py:43-77", "src/atlas_gbt/inputs.py:103-144", "bin/cron_shadow_atlas_gbt_v1.sh:37", "scripts/stoxx600_v6_freeze_inputs.py:96-111"]
+    notes: "Champs du store figes au 07/08/2026 jusqu'au rattrapage de la passe sxxr (liste de champs du 09/10/2026). Seule l'etape de gel lit le store du partage ; secteurs jamais rafraichis, comme V6."
   atlas_psc_shadow:
     label: "ATLAS PSC conviction (shadow)"
     kind: shadow
@@ -66,8 +66,9 @@ consumers:
     schedule: "09:00 mar-sam"
     reads:
       - {universe: igv, artefact: xlsx, fields: [best_eps, best_sales, announcement_dt, shares_out, div_yield], via: "ATLAS_data_igv_static_conviction.xlsx (profil conviction)"}
-    evidence: ["research/conviction/research.yaml:14", "src/atlas_conviction/fundamentals/bbg.py:111", "logs/shadow/cron_psc_2026-10-09.log:10"]
-    notes: "Classeur conviction fige au 07/08/2026 : bras f4 en repli neutre chaque jour. Prix : cache de l'incumbent PSC (yfinance)."
+      - {universe: igv, artefact: xlsx, fields: [price], via: "cache CSV de l'incumbent PSC, derive chaque nuit de la feuille price de ATLAS_data_igv_static.xlsx"}
+    evidence: ["research/conviction/research.yaml:13-14", "src/atlas_conviction/fundamentals/bbg.py:111", "logs/shadow/cron_psc_2026-10-09.log:10", "../SecretProject/ATLAS/universes/PSC/run_catchup.sh:142"]
+    notes: "Classeur conviction fige au 07/08/2026 : bras f4 (pead, rev_mom, shy) en repli neutre sans interruption depuis le 18/08/2026."
   atlas_pbh_shadow:
     label: "ATLAS PBH conviction (shadow)"
     kind: shadow
@@ -78,7 +79,7 @@ consumers:
     reads:
       - {universe: pbh, artefact: xlsx, fields: [best_eps, best_sales, announcement_dt, shares_out, div_yield], via: "ATLAS_data_pbh_static_conviction.xlsx (profil conviction)"}
     evidence: ["research/conviction/research.yaml:22", "logs/shadow/cron_pbh_2026-10-09.log:2"]
-    notes: "Meme repli neutre que PSC. Prix : classeur de l'incumbent PBH (yfinance)."
+    notes: "Meme repli neutre que PSC depuis le 18/08/2026. Prix : classeur de l'incumbent PBH (yfinance), hors DataLoader ; ATLAS_data_pbh_static.xlsx n'a aucun lecteur."
   atlas_stoxx600_v2_shadow:
     label: "ATLAS stoxx600_v2 conviction (shadow)"
     kind: shadow
@@ -89,7 +90,7 @@ consumers:
     reads:
       - {universe: sxxr, artefact: xlsx, fields: [best_eps, best_sales, announcement_dt, shares_out, div_yield], via: "ATLAS_data_sxxr_static_conviction.xlsx, ABSENT du partage"}
     evidence: ["research/conviction/research.yaml:37", "logs/shadow/cron_sxxr_v2_2026-10-09.log:2"]
-    notes: "FileNotFoundError chaque jour depuis le 30/09/2026 ; prix lus dans le CSV legacy Stagiaires."
+    notes: "FileNotFoundError a chaque tir depuis le 30/09/2026 (dernier succes le 29/09), alerte mail quotidienne ; prix lus dans le CSV legacy Stagiaires, produit par un collecteur xbbg distinct du DataLoader (tickers hors euro convertis en EUR)."
   atlas_macro_shadow:
     label: "ATLAS macro V1 et V2 (shadow)"
     kind: shadow
@@ -100,7 +101,7 @@ consumers:
     reads:
       - {universe: global_macro, artefact: xlsx, fields: [price]}
     evidence: ["envs/shadow.yaml:68", "src/atlas_macro/data/loader.py:14", "src/atlas_macro/data/catalog.py:246-257"]
-    notes: "Catalogue fail-fast de 97 colonnes ; l'etape 1 du wrapper appelle l'ancien collecteur de SecretProject et echoue chaque jour sans consequence."
+    notes: "Catalogue fail-fast de 97 colonnes ; l'etape 1 du wrapper appelle l'ancien collecteur de SecretProject (chemin X:) et echoue a chaque tir depuis le 15/06 ; la fraicheur depend d'une passe global_macro faite avant 10:00 (FATAL stale les 07 et 08/10/2026). Le cron relit aussi le classeur dans scripts/macro_v2_paper_nav.py et macro_weights_ytd_plot.py."
   atlas_research_sxxr:
     label: "ATLAS recherche et outils dev (backtests, v5 robustesse, v6 audit, ml_forecaster)"
     kind: research
@@ -114,6 +115,19 @@ consumers:
       - {universe: sxxr, artefact: refdata, fields: [sector, currency]}
     evidence: ["envs/dev.yaml:27", "research/v6/audit_data.py:25-30", "research/ml_forecaster/data.py:39"]
     notes: "Snapshots scelles sous state/research ; best_eps, best_sales, short_int du store ne sont plus collectes."
+  atlas_conviction_research:
+    label: "ATLAS recherche conviction et mining (atlas-conv, research/mining)"
+    kind: research
+    status: dormant
+    repo: /home/vincent/QR/ATLAS
+    entry: "atlas-conv, research/mining/harness/data.py"
+    schedule: aucun
+    reads:
+      - {universe: igv, artefact: xlsx, fields: [best_eps, best_sales, announcement_dt, shares_out, div_yield, short_int], via: "classeurs _conviction"}
+      - {universe: pbh, artefact: xlsx, fields: [best_eps, best_sales, announcement_dt, shares_out, div_yield, short_int], via: "classeurs _conviction"}
+      - {universe: sxxr, artefact: xlsx, fields: [best_eps, best_sales, short_int], via: "classeur _conviction sxxr, absent"}
+    evidence: ["src/atlas_conviction/cli.py:319-324", "research/mining/harness/data.py:13-16"]
+    notes: "Recherche terminee en aout 2026 ; cassee pour sxxr (classeur absent)."
   atlas_strategy_jp:
     label: "ATLAS strategie jp (backtest)"
     kind: research
@@ -147,18 +161,18 @@ consumers:
     reads:
       - {universe: sxxr, artefact: xlsx, fields: [EPS, Pxtobook]}
     evidence: ["Research/run_trading_pipeline.py:203", "Research/run_trading_pipeline.py:331-344"]
-    notes: "Lit le classeur pendant la fenetre d'ecriture de la passe du soir (echecs WinError 5 du loader les 29/09 et 01/10 a 18:05)."
+    notes: "Ouvre le classeur de 18:05:03 a 18:05:19 (13 a 16 s) : les deux echecs WinError 5 du loader (29/09 18:05:13, 01/10 18:05:15) tombent dans cette fenetre ; le loader ne reessaie que 9 s. Lit la donnee de la veille des que la passe finit apres 18:05."
   secretproject_topselection:
     label: "SecretProject TopSelection"
     kind: prod
-    status: actif
+    status: en_echec
     repo: /home/vincent/QR/SecretProject/TopSelection
     entry: "run_daily_pipeline.sh, run_daily_worst5_pipeline.sh"
     schedule: "14h-18h et 20h, a :05 et :15, lun-ven"
     reads:
       - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark]}
-    evidence: ["config.yaml:6", "data/atlas_reader.py:38-53", "runners/run_daily.py:209-212"]
-    notes: ""
+    evidence: ["config.yaml:6", "data/atlas_reader.py:38-53", "data/atlas_reader.py:126", "logs/daily_pipeline.log:120222"]
+    notes: "En echec a chaque passage depuis le 22/09/2026 : les 110 colonnes ajoutees au classeur sxxr le 21/09 (composition du registre) ne sont pas triees et atlas_reader.py:126 fait un reindex(method='ffill') qui exige un ordre croissant (ValueError index must be monotonic). Correction cote lecteur (trier les colonnes) : le DataLoader ne doit pas reordonner le classeur, le gel V6/GBT compare l'ordre des colonnes. Lit aussi le classeur a 18:05 pendant l'ecriture de la passe du soir."
   secretproject_psc_incumbent:
     label: "SecretProject PSC incumbent (lit ET reecrit le classeur igv)"
     kind: cron
@@ -170,6 +184,17 @@ consumers:
       - {universe: igv, artefact: xlsx, fields: [price], via: "reecrit parameters et price depuis yfinance, supprime EPS et Pxtobook"}
     evidence: ["run_catchup.sh:142", "data_utils.py:660-662", "../../../../ATLAS/docs/audit/2026-08-07-audit-psc.md:47"]
     notes: "Double ecrivain : le DataLoader n'a aucun manifeste igv ; le classeur igv est de fait produit par ce cron."
+  secretproject_jp_comp_funds:
+    label: "SecretProject RiTM_x_ATLAS fetch_comp_perf (fonds comparables Japon)"
+    kind: cron
+    status: actif
+    repo: /home/vincent/QR/SecretProject/ATLAS
+    entry: CustomBacktest/JP/RiTM_x_ATLAS/fetch_comp_perf.py
+    schedule: "09:00 mardi"
+    reads:
+      - {universe: jp, artefact: csv, fields: [name, sector], via: "data_loader/tickers/jp_names.csv et jp_sectors.csv de l'ancien clone SecretProject/ATLAS/data_loader (HEAD 4ffdbcc du 07/08/2026)"}
+    evidence: ["CustomBacktest/JP/RiTM_x_ATLAS/fetch_comp_perf.py:31", "CustomBacktest/JP/RiTM_x_ATLAS/fetch_comp_perf.py:214-217"]
+    notes: "Ne lit aucune sortie du loader : fichiers d'entree du depot, dans un clone non mis a jour. Contenu identique a tickers/jp_names.csv et jp_sectors.csv de ce depot au 09/10/2026 (md5)."
   secretproject_atlas_universes_dormants:
     label: "SecretProject ATLAS universes STOXX600, JP, global_macro (dormants)"
     kind: dormant
@@ -194,7 +219,7 @@ consumers:
     reads:
       - {universe: sxxr, artefact: xlsx, fields: [benchmark]}
     evidence: ["ingest/xlsx_client.py:33-69", "ingest/scheduler.py:138", "scripts/migrate_to_xlsx_benchmark.py:14-18"]
-    notes: "Lit a 18:00, avant l'ecriture du classeur (~18:04) : benchmark en retard d'un jour."
+    notes: "Lit a 18:00:02, avant l'ecriture du classeur (18:04 au mieux) : benchmark toujours en retard d'un jour."
   pergamtools_macro:
     label: "Macro (nowcasts d'inflation)"
     kind: service
@@ -251,9 +276,9 @@ consumers:
     entry: "main.py screener --refresh --apply --email"
     schedule: "18:30 lun-ven"
     reads:
-      - {universe: sxxr, artefact: xlsx, fields: [price, Pxtobook, EPS]}
-    evidence: ["config.py:34-37", "data/local_loader.py:24-29"]
-    notes: "STUDY_END_DATE = 2026-06-24 fige l'as-of des signaux (config.py:45)."
+      - {universe: sxxr, artefact: xlsx, fields: [price]}
+    evidence: ["config.py:34-35", "data/local_loader.py:24-29", "data/local_loader.py:84"]
+    notes: "STUDY_END_DATE = 2026-06-24 fige l'as-of des signaux (config.py:45). Pxtobook et EPS sont declares (config.py:36-37) mais load_fundamental n'a aucun appelant : seule la feuille price est lue."
   quickresearch_peq_options_screeners:
     label: "QuickResearch PEQ_Options_Review screeners (earnings, RV)"
     kind: cron
@@ -262,9 +287,9 @@ consumers:
     entry: "screeners.earnings_screener, screeners.rv_screener"
     schedule: "08:50 et 08:55 lun-ven"
     reads:
-      - {universe: option_europe, artefact: xlsx, fields: [price, earning_implied_move, iv_3m_90, iv_3m_95, iv_3m_975, iv_3m_100, iv_3m_105, iv_3m_110, iv_12m_90, iv_12m_95, iv_12m_975, iv_12m_100, iv_12m_105, iv_12m_110]}
-    evidence: ["screeners/common.py:26", "screeners/rv_screener.py:29-30", "logs/screeners.log:142"]
-    notes: "Surface figee au 20/07/2026 (ERROR donnees stale chaque matin) ; rv_screener echoue aussi sur ModuleNotFoundError pricing."
+      - {universe: option_europe, artefact: xlsx, fields: [price, earning_implied_move, iv_3m_90, iv_3m_95, iv_3m_975, iv_3m_100, iv_3m_105, iv_3m_110, iv_12m_90, iv_12m_95, iv_12m_975, iv_12m_100, iv_12m_105, iv_12m_110], via: "lectures prevues ; le 09/10/2026 seule la feuille parameters est ouverte (surface_end_date) avant l'arret sur donnees perimees"}
+    evidence: ["screeners/common.py:26", "screeners/common.py:107-121", "screeners/earnings_screener.py:209-215", "screeners/rv_screener.py:29-30", "logs/screeners.log:142"]
+    notes: "Surface figee au 20/07/2026 : earnings_screener journalise ERROR donnees stale chaque matin (59 jours ouvres de retard le 09/10) ; rv_screener plante a l'import (ModuleNotFoundError pricing) depuis le 30/07 et ne lit plus le classeur."
   quickresearch_peq_options_analyses:
     label: "QuickResearch PEQ_Options_Review analyses (P7, P8)"
     kind: research

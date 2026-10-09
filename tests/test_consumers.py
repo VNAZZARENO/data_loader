@@ -78,5 +78,5 @@ def test_real_consumers_file_is_consistent():
     assert {"sxxr", "igv", "pbh", "global_macro", "macro", "jp", "option_europe"} <= set(byu)
     # la passe sxxr couvre tout ce que ses consommateurs xlsx/store attendent
     sxxr_warn = [f for f in findings if f.universe == "sxxr" and f.level == "WARN" and "absents" in f.message]
-    assert [f.consumer for f in sxxr_warn] == ["atlas_stoxx600_v2_shadow"]
+    assert sorted(f.consumer for f in sxxr_warn) == ["atlas_conviction_research", "atlas_stoxx600_v2_shadow"]
     print(consumers.matrix(doc, config, registry_names))
