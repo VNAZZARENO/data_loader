@@ -15,6 +15,16 @@
   unité non confirmée, dont `ESTR Index` (`euro_credit`), que Bloomberg identifie comme un
   indice actions Espagne et non comme le taux €STR (`ESTRON Index`).
 
+- **Rattachement univers → consommateurs** (`config/consumers.yaml`, module
+  `dl/consumers.py`) : 25 consommateurs déclarés avec nature, statut, horaire, lectures
+  (univers, artefact, champs) et preuves, établis par l'audit du jour
+  (`docs/2026-10-09-audit-univers-consommateurs.md`). Le loader journalise les
+  consommateurs de l'univers au début de chaque passe et avertit quand un champ attendu
+  n'est pas dans la liste de champs de l'univers. `python -m dl.consumers check|matrix`.
+  Le contrôle initial signale : les bras conviction de PSC et PBH attendent cinq champs
+  que les passes `igv` et `pbh` ne collectent pas ; `stoxx600_v2` et les screeners PEQ
+  sont en échec ; six univers n'ont aucun consommateur.
+
 ### Changed
 - **Un univers = une liste de champs = une passe par soir.** La liste de champs d'un
   univers se déclare dans `universe_overrides.<u>.fields` et la passe du soir

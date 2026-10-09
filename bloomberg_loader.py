@@ -38,7 +38,7 @@ from tqdm import tqdm
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import option_universe  # noqa: E402  (local module, needs the path insert above)
 import index_members  # noqa: E402  (local module, needs the path insert above)
-from dl import manifests, registry, requests_worker, smbio  # noqa: E402
+from dl import consumers, manifests, registry, requests_worker, smbio  # noqa: E402
 from dl.store import derive as store_derive  # noqa: E402
 from dl.store import fx as store_fx  # noqa: E402
 from dl.store import layout as store_layout, legacy_xlsx, reader as store_reader, writer as store_writer  # noqa: E402
@@ -83,6 +83,7 @@ class ATLASBloombergLoader:
         self.agents = agents
         self.mode = mode
         self.refresh_universe = refresh_universe
+        self.config_path = config_path
         self.config = self._load_config(config_path)
 
         opt_cfg = self.config.get("option_modes", {})
@@ -785,7 +786,20 @@ class ATLASBloombergLoader:
         except OSError as e:  # the share being down must not mask the run result
             logger.warning(f"Could not write run manifest: {e}")
 
+    def _log_consumers(self) -> None:
+        """Qui depend de cette passe (config/consumers.yaml) ; un champ attendu mais non collecte est signale."""
+        try:
+            summary, warnings = consumers.describe(self.universe, list(self.fields), self.config_path)
+        except Exception as e:  # le rattachement ne doit jamais empecher une extraction
+            logger.warning(f"consumers.yaml illisible : {e}")
+            return
+        if summary:
+            logger.info(summary)
+        for w in warnings:
+            logger.warning(w)
+
     def _run(self) -> None:
+        self._log_consumers()
         agent_str = f", agents={self.agents}" if self.agents else ""
         logger.info(
             f"ATLAS Bloomberg Loader — universe={self.universe}{agent_str}, "

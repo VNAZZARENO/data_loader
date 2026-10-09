@@ -58,6 +58,26 @@ est une extraction ponctuelle de recherche : elle écrit
 passe planifiée n'en dépend. `sxxr` collecte ainsi `price`, `Pxtobook`, `EPS`
 (shadows V5/V6) et `shares_out`, `div_yield`, `announcement_dt` (shadow `atlas_gbt_v1`).
 
+### Consommateurs d'un univers (`config/consumers.yaml`)
+
+Chaque univers est rattaché à ses consommateurs (outil, stratégie, projet qui lit un
+classeur, le store, le refdata ou l'API du dashboard) dans `config/consumers.yaml` :
+identifiant, libellé, nature (`prod`, `shadow`, `service`, `cron`, `research`,
+`procedure`, `dormant`), statut (`actif`, `donnees_figees`, `en_echec`, `dormant`,
+`mort`, `ponctuel`), horaire, lectures (`universe`, `artefact`, `fields`, `via`),
+preuves `fichier:ligne` et notes. Le loader journalise au début de chaque passe les
+consommateurs de l'univers et avertit si l'un d'eux attend un champ absent de la
+liste de champs (il ne serait pas collecté). Contrôle à la demande :
+
+```bash
+python -m dl.consumers check    # anomalies : univers inconnu, champ non collecté, consommateur en échec
+python -m dl.consumers matrix   # matrice univers -> consommateurs
+```
+
+Le fichier est tenu à la main : tout nouveau lecteur d'une sortie du DataLoader s'y
+déclare, tout arrêt y change le statut. Origine : audit univers → consommateurs du
+2026-10-09 (`docs/2026-10-09-audit-univers-consommateurs.md`).
+
 ### CLI flags
 
 | Flag | Description |

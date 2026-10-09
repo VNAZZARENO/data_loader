@@ -1,0 +1,303 @@
+# Rattachement univers -> consommateurs. Source de verite relue par le loader (journal de
+# chaque passe, avertissement si un champ attendu n'est pas collecte) et par
+# `python -m dl.consumers check|matrix`. Etabli par l'audit du 2026-10-09
+# (docs/2026-10-09-audit-univers-consommateurs.md) ; a tenir a jour a chaque nouveau
+# lecteur ou arret. Statuts : actif, donnees_figees (lecteur vivant sur une sortie
+# plus produite), en_echec, dormant, mort, ponctuel. Les preuves sont des fichier:ligne
+# relatifs au depot du consommateur, releves le 2026-10-09.
+version: 1
+updated: 2026-10-09
+consumers:
+  # ---------------------------------------------------------------- ATLAS (QR/ATLAS)
+  atlas_v4_shadow:
+    label: "ATLAS V4 stoxx600 (shadow)"
+    kind: shadow
+    status: actif
+    repo: /home/vincent/QR/ATLAS
+    entry: bin/cron_shadow_stoxx600.sh
+    schedule: "18:30 lun-ven"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark]}
+    evidence: ["strategies/stoxx600/strategy.yaml:9", "envs/shadow.yaml:66", "src/atlas/data/loader.py:99-120", "src/atlas/data/fundamentals.py:48-52"]
+    notes: "Classeur live, non gele. FX yfinance, ESG Compass hors DataLoader."
+  atlas_v5_shadow:
+    label: "ATLAS V5 stoxx600_v5 (shadow)"
+    kind: shadow
+    status: actif
+    repo: /home/vincent/QR/ATLAS
+    entry: bin/cron_shadow_stoxx600_v5.sh
+    schedule: "18:45 lun-ven"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark]}
+      - {universe: sxxr, artefact: refdata, fields: [sector]}
+    evidence: ["strategies/stoxx600_v5/strategy.yaml:6", "src/atlas/data/refdata.py:33-38"]
+    notes: "Son paper_nav (benchmark SXXR) sert de comparateur a V6 et au GBT."
+  atlas_v6_shadow:
+    label: "ATLAS V6 stoxx600_v6 (shadow, copie gelee)"
+    kind: shadow
+    status: actif
+    repo: /home/vincent/QR/ATLAS
+    entry: bin/cron_shadow_stoxx600_v6.sh
+    schedule: "19:15 lun-ven"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark], via: "copie gelee state/shadow_v6_r1/inputs (scripts/stoxx600_v6_freeze_inputs.py)"}
+      - {universe: sxxr, artefact: refdata, fields: [sector, currency], via: "copie gelee"}
+    evidence: ["bin/cron_shadow_stoxx600_v6.sh:31-33", "scripts/stoxx600_v6_freeze_inputs.py:25", "src/atlas/data/v6.py:51-69"]
+    notes: "Les revisions historiques de la source sont ignorees et tracees ; secteurs jamais rafraichis."
+  atlas_gbt_v1_shadow:
+    label: "ATLAS atlas_gbt_v1 (shadow GBT, copie gelee)"
+    kind: shadow
+    status: actif
+    repo: /home/vincent/QR/ATLAS
+    entry: bin/cron_shadow_atlas_gbt_v1.sh
+    schedule: "19:45 lun-ven"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark], via: "copie gelee state/shadow_gbt_v1/inputs"}
+      - {universe: sxxr, artefact: store, fields: [shares_out, div_yield, announcement_dt], via: "layer=clean, copie append-only"}
+      - {universe: sxxr, artefact: refdata, fields: [sector, currency]}
+    evidence: ["strategies/atlas_gbt_v1/strategy.yaml:19-24", "src/atlas_gbt/inputs.py:43-77", "src/atlas_gbt/inputs.py:103-144"]
+    notes: "Champs du store figes au 07/08/2026 jusqu'au rattrapage de la passe sxxr (liste de champs du 09/10/2026)."
+  atlas_psc_shadow:
+    label: "ATLAS PSC conviction (shadow)"
+    kind: shadow
+    status: donnees_figees
+    repo: /home/vincent/QR/ATLAS
+    entry: bin/cron_shadow_psc.sh
+    schedule: "09:00 mar-sam"
+    reads:
+      - {universe: igv, artefact: xlsx, fields: [best_eps, best_sales, announcement_dt, shares_out, div_yield], via: "ATLAS_data_igv_static_conviction.xlsx (profil conviction)"}
+    evidence: ["research/conviction/research.yaml:14", "src/atlas_conviction/fundamentals/bbg.py:111", "logs/shadow/cron_psc_2026-10-09.log:10"]
+    notes: "Classeur conviction fige au 07/08/2026 : bras f4 en repli neutre chaque jour. Prix : cache de l'incumbent PSC (yfinance)."
+  atlas_pbh_shadow:
+    label: "ATLAS PBH conviction (shadow)"
+    kind: shadow
+    status: donnees_figees
+    repo: /home/vincent/QR/ATLAS
+    entry: bin/cron_shadow_pbh.sh
+    schedule: "09:20 mar-sam"
+    reads:
+      - {universe: pbh, artefact: xlsx, fields: [best_eps, best_sales, announcement_dt, shares_out, div_yield], via: "ATLAS_data_pbh_static_conviction.xlsx (profil conviction)"}
+    evidence: ["research/conviction/research.yaml:22", "logs/shadow/cron_pbh_2026-10-09.log:2"]
+    notes: "Meme repli neutre que PSC. Prix : classeur de l'incumbent PBH (yfinance)."
+  atlas_stoxx600_v2_shadow:
+    label: "ATLAS stoxx600_v2 conviction (shadow)"
+    kind: shadow
+    status: en_echec
+    repo: /home/vincent/QR/ATLAS
+    entry: bin/cron_shadow_sxxr_v2.sh
+    schedule: "09:40 mar-sam"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [best_eps, best_sales, announcement_dt, shares_out, div_yield], via: "ATLAS_data_sxxr_static_conviction.xlsx, ABSENT du partage"}
+    evidence: ["research/conviction/research.yaml:37", "logs/shadow/cron_sxxr_v2_2026-10-09.log:2"]
+    notes: "FileNotFoundError chaque jour depuis le 30/09/2026 ; prix lus dans le CSV legacy Stagiaires."
+  atlas_macro_shadow:
+    label: "ATLAS macro V1 et V2 (shadow)"
+    kind: shadow
+    status: actif
+    repo: /home/vincent/QR/ATLAS
+    entry: bin/cron_macro_shadow.sh
+    schedule: "10:00 lun-ven (rsync du book vers le lab a 10:05)"
+    reads:
+      - {universe: global_macro, artefact: xlsx, fields: [price]}
+    evidence: ["envs/shadow.yaml:68", "src/atlas_macro/data/loader.py:14", "src/atlas_macro/data/catalog.py:246-257"]
+    notes: "Catalogue fail-fast de 97 colonnes ; l'etape 1 du wrapper appelle l'ancien collecteur de SecretProject et echoue chaque jour sans consequence."
+  atlas_research_sxxr:
+    label: "ATLAS recherche et outils dev (backtests, v5 robustesse, v6 audit, ml_forecaster)"
+    kind: research
+    status: ponctuel
+    repo: /home/vincent/QR/ATLAS
+    entry: "atlas-backtest, research/v5, research/v6/audit_data.py, research/ml_forecaster/run.py"
+    schedule: manuel
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark]}
+      - {universe: sxxr, artefact: store, fields: [shares_out, div_yield, announcement_dt]}
+      - {universe: sxxr, artefact: refdata, fields: [sector, currency]}
+    evidence: ["envs/dev.yaml:27", "research/v6/audit_data.py:25-30", "research/ml_forecaster/data.py:39"]
+    notes: "Snapshots scelles sous state/research ; best_eps, best_sales, short_int du store ne sont plus collectes."
+  atlas_strategy_jp:
+    label: "ATLAS strategie jp (backtest)"
+    kind: research
+    status: dormant
+    repo: /home/vincent/QR/ATLAS
+    entry: strategies/jp/strategy.yaml
+    schedule: aucun
+    reads:
+      - {universe: jp, artefact: xlsx, fields: [EPS, Pxtobook]}
+    evidence: ["strategies/jp/strategy.yaml:3-4", "envs/dev.yaml:25-26"]
+    notes: "Classeur jp du 13/08/2026, plus produit."
+  atlas_tracker:
+    label: "ATLAS tracker (POC)"
+    kind: research
+    status: ponctuel
+    repo: /home/vincent/QR/ATLAS
+    entry: "python -m atlas_tracker"
+    schedule: manuel
+    reads:
+      - {universe: global_macro, artefact: xlsx, fields: [price]}
+    evidence: ["research/tracker/tracker.yaml:3-8", "src/atlas_tracker/data.py:68-69"]
+    notes: "Colonne SX5T Index."
+  # --------------------------------------------------------- SecretProject (QR/SecretProject)
+  secretproject_v3:
+    label: "SecretProject v3 pipeline quotidien"
+    kind: prod
+    status: actif
+    repo: /home/vincent/QR/SecretProject/v3
+    entry: run_daily_pipeline.sh
+    schedule: "18:05 lun-ven"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [EPS, Pxtobook]}
+    evidence: ["Research/run_trading_pipeline.py:203", "Research/run_trading_pipeline.py:331-344"]
+    notes: "Lit le classeur pendant la fenetre d'ecriture de la passe du soir (echecs WinError 5 du loader les 29/09 et 01/10 a 18:05)."
+  secretproject_topselection:
+    label: "SecretProject TopSelection"
+    kind: prod
+    status: actif
+    repo: /home/vincent/QR/SecretProject/TopSelection
+    entry: "run_daily_pipeline.sh, run_daily_worst5_pipeline.sh"
+    schedule: "14h-18h et 20h, a :05 et :15, lun-ven"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark]}
+    evidence: ["config.yaml:6", "data/atlas_reader.py:38-53", "runners/run_daily.py:209-212"]
+    notes: ""
+  secretproject_psc_incumbent:
+    label: "SecretProject PSC incumbent (lit ET reecrit le classeur igv)"
+    kind: cron
+    status: actif
+    repo: /home/vincent/QR/SecretProject/ATLAS/universes/PSC
+    entry: run_catchup.sh
+    schedule: "01:30 mar-sam"
+    reads:
+      - {universe: igv, artefact: xlsx, fields: [price], via: "reecrit parameters et price depuis yfinance, supprime EPS et Pxtobook"}
+    evidence: ["run_catchup.sh:142", "data_utils.py:660-662", "../../../../ATLAS/docs/audit/2026-08-07-audit-psc.md:47"]
+    notes: "Double ecrivain : le DataLoader n'a aucun manifeste igv ; le classeur igv est de fait produit par ce cron."
+  secretproject_atlas_universes_dormants:
+    label: "SecretProject ATLAS universes STOXX600, JP, global_macro (dormants)"
+    kind: dormant
+    status: dormant
+    repo: /home/vincent/QR/SecretProject/ATLAS
+    entry: universes/*/config/system.yaml
+    schedule: aucun
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [price]}
+      - {universe: jp, artefact: xlsx, fields: [price]}
+      - {universe: global_macro, artefact: xlsx, fields: [price]}
+    evidence: ["universes/STOXX600/config/system.yaml:5", "universes/JP/config/system.yaml:5", "universes/global_macro/config/system.yaml:5"]
+    notes: "Aucun cron ; universes commodities et euro_credit pointent des classeurs inexistants (code mort)."
+  # ------------------------------------------------------------ pergam-tools
+  pergamtools_attribution:
+    label: "Attribution (benchmark SXXR)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/Attribution
+    entry: "service 7008, APScheduler 18:00 Europe/Paris"
+    schedule: "18:00 quotidien"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [benchmark]}
+    evidence: ["ingest/xlsx_client.py:33-69", "ingest/scheduler.py:138", "scripts/migrate_to_xlsx_benchmark.py:14-18"]
+    notes: "Lit a 18:00, avant l'ecriture du classeur (~18:04) : benchmark en retard d'un jour."
+  pergamtools_macro:
+    label: "Macro (nowcasts d'inflation)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/Macro
+    entry: "scripts/run_nowcast.py --refresh (via GetMacroData /api/refresh, cron 11:45)"
+    schedule: "11:45 lun-ven"
+    reads:
+      - {universe: macro, artefact: store, fields: [price, survey_median, survey_high, survey_low, survey_n, actual_release, release_dt], via: "layer=clean, parquet lu directement"}
+    evidence: ["macro/config.py:16", "macro/sources/bbg_store.py:16", "config/bbg.yaml:6"]
+    notes: "La passe macro du poste Bloomberg est irreguliere ; le cron de 11:45 tourne aussi les jours sans extraction."
+  pergamtools_getmacrodata:
+    label: "GetMacroData (service 7019, indirect via Macro)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/GetMacroData
+    entry: "routers/api.py, macro_bridge.py"
+    schedule: permanent
+    reads:
+      - {universe: macro, artefact: store, fields: [price], via: "paquet macro"}
+    evidence: ["routers/api.py:150-172", "macro_bridge.py:12-20"]
+    notes: ""
+  pergamtools_vigie:
+    label: "Vigie (coeur sur le lab)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/Vigie
+    entry: "donnees/sources/dataloader.py (API series, layer=raw)"
+    schedule: "a la demande"
+    reads:
+      - {universe: macro, artefact: api, fields: [price]}
+      - {universe: global_macro, artefact: api, fields: [price]}
+      - {universe: sxxr, artefact: api, fields: [price]}
+      - {universe: igv, artefact: api, fields: [price]}
+    evidence: ["config.py:43-45", "donnees/sources/dataloader.py:52-56", "donnees/facteurs.py:27-32"]
+    notes: "Premier client de l'API du dashboard (environ 1050 appels series du 22/09 au 09/10/2026)."
+  pergamtools_ats_fiches:
+    label: "ATS fiches (worker sur le lab)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/ATS
+    entry: fiches/cours.py
+    schedule: "a la demande"
+    reads:
+      - {universe: global_macro, artefact: api, fields: [price], via: "routes runs et series, layer=raw"}
+    evidence: ["fiches/cours.py:155", "fiches/cours.py:162-179", "fiches/facteurs.json:223"]
+    notes: "Six tickers de taux ; exclut la journee provisoire ; panne = facteurs non mesures."
+  # ------------------------------------------------------------ QuickResearch et reporting
+  quickresearch_cluster_spread_mr:
+    label: "QuickResearch Cluster_Spread_MR (screener)"
+    kind: cron
+    status: actif
+    repo: /home/vincent/QR/QuickResearch/Cluster_Spread_MR
+    entry: "main.py screener --refresh --apply --email"
+    schedule: "18:30 lun-ven"
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [price, Pxtobook, EPS]}
+    evidence: ["config.py:34-37", "data/local_loader.py:24-29"]
+    notes: "STUDY_END_DATE = 2026-06-24 fige l'as-of des signaux (config.py:45)."
+  quickresearch_peq_options_screeners:
+    label: "QuickResearch PEQ_Options_Review screeners (earnings, RV)"
+    kind: cron
+    status: en_echec
+    repo: /home/vincent/QR/QuickResearch/PEQ_Options_Review
+    entry: "screeners.earnings_screener, screeners.rv_screener"
+    schedule: "08:50 et 08:55 lun-ven"
+    reads:
+      - {universe: option_europe, artefact: xlsx, fields: [price, earning_implied_move, iv_3m_90, iv_3m_95, iv_3m_975, iv_3m_100, iv_3m_105, iv_3m_110, iv_12m_90, iv_12m_95, iv_12m_975, iv_12m_100, iv_12m_105, iv_12m_110]}
+    evidence: ["screeners/common.py:26", "screeners/rv_screener.py:29-30", "logs/screeners.log:142"]
+    notes: "Surface figee au 20/07/2026 (ERROR donnees stale chaque matin) ; rv_screener echoue aussi sur ModuleNotFoundError pricing."
+  quickresearch_peq_options_analyses:
+    label: "QuickResearch PEQ_Options_Review analyses (P7, P8)"
+    kind: research
+    status: ponctuel
+    repo: /home/vincent/QR/QuickResearch/PEQ_Options_Review
+    entry: analysis/p7_tail_overlay.py, analysis/p8*_iv_extract.py
+    schedule: manuel
+    reads:
+      - {universe: option_europe, artefact: xlsx, fields: [price, vol_1m, vol_10d, total_call_volume, put_call_ratio], via: "classeurs static et bt"}
+      - {universe: sxxr, artefact: xlsx, fields: [price]}
+    evidence: ["analysis/p7_tail_overlay.py:39", "analysis/p8f_iv_extract.py:12", "analysis/p8b_foundation.py:34"]
+    notes: "Seul lecteur de ATLAS_data_option_europe_bt_static.xlsx."
+  quickresearch_overnight:
+    label: "QuickResearch Overnight (backtests)"
+    kind: research
+    status: ponctuel
+    repo: /home/vincent/QR/QuickResearch/Overnight
+    entry: scripts/backtest*.py
+    schedule: manuel
+    reads:
+      - {universe: sxxr, artefact: xlsx, fields: [benchmark]}
+      - {universe: igv, artefact: xlsx, fields: [price]}
+      - {universe: jp, artefact: xlsx, fields: [price]}
+    evidence: ["scripts/backtest.py:35", "scripts/run_closeonly.py:110-112", "scripts/gap_lib.py:73-76"]
+    notes: "OHLC lus dans les CSV legacy Stagiaires ; le screener GAP UP du cron n'en depend pas."
+  reporting_mensuel_lpes:
+    label: "Reporting_Mensuel LPES (EURGBP) et skills commentaire hebdo/mensuel"
+    kind: procedure
+    status: ponctuel
+    repo: /home/vincent/QR/Reporting_Mensuel
+    entry: run_lpes_monthly.py
+    schedule: "mensuel, manuel"
+    reads:
+      - {universe: global_macro, artefact: xlsx, fields: [price]}
+    evidence: ["run_lpes_monthly.py:34", "run_lpes_monthly.py:41-47", "~/.claude/skills/commentaire-hebdo/SKILL.md:112"]
+    notes: "Procedure GSM trimestrielle : memes series via l'API (GSM/CLAUDE_GSM.md:158-163)."
