@@ -32,14 +32,18 @@
   sont réécrites depuis la plus ancienne date écrite au store pendant la passe, pas
   seulement depuis l'année de son début.
 
-**À faire sur le PC Bloomberg** : `git pull`, puis la passe du soir habituelle
-`python bloomberg_loader.py --universe sxxr --daily`. La première passe rattrape
-`shares_out`, `div_yield` et `announcement_dt` du 07/08/2026 à aujourd'hui (une
-poignée de requêtes BDH) et ajoute trois onglets au classeur `ATLAS_data_sxxr_static.xlsx` ; le gel V6/GBT
-ne copie que price, Pxtobook, EPS et benchmark, donc sans effet sur les shadows.
-Vérifier dans le log la ligne `ticker(s) behind for 'shares_out': catch-up from
-2026-08-07` et, sur le dashboard, la fraîcheur des deux champs. Si la tâche planifiée
-passe `--agents`, le retirer : le profil ne couvre pas Pxtobook ni EPS.
+**À faire sur le PC Bloomberg** : `git pull`, puis la passe du soir habituelle sur
+`sxxr` (sans `--agents` : le profil ne couvre pas Pxtobook ni EPS). D'après le
+manifeste du 08/10/2026 (`univers/runs/sxxr/latest_default.json`), cette passe tourne en
+extraction complète (`daily: false`, 17 h 50 → 18 h 04 Paris, 14 min pour trois champs) :
+avec six champs compter environ 25 min, soit une fin vers 18 h 15 pour un premier cron
+ATLAS à 18 h 30. Avancer le départ de la tâche d'une demi-heure, ou passer en `--daily`
+(quelques minutes ; la première passe rattrape alors `shares_out`, `div_yield` et
+`announcement_dt` depuis le 07/08/2026 par les filigranes, ligne de log `ticker(s)
+behind for 'shares_out': catch-up from 2026-08-07`). Dans les deux cas le trou est
+comblé et trois onglets s'ajoutent au classeur `ATLAS_data_sxxr_static.xlsx` ; le gel
+V6/GBT ne copie que price, Pxtobook, EPS et benchmark, donc sans effet sur les shadows.
+Vérifier ensuite sur le dashboard la fraîcheur des trois champs.
 
 ## 2026-09-29
 
