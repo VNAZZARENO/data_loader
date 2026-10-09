@@ -44,11 +44,11 @@
 
 <section id="composition" hidden>
  <div id="candidates"></div>
- <div class="card"><h3>Ajouter des tickers</h3><div class="row"><textarea id="addText" placeholder="Un ticker par ligne, ou separes par des virgules. Ex. : MC FP, ROG SW Equity" style="min-height:70px"></textarea></div>
+ <div class="card"><h3>Ajouter des tickers</h3><div class="row"><textarea id="addText" placeholder="Un ticker par ligne, ou separes par des virgules. Ex. : MC FP, ROG SW Equity&#10;Description optionnelle, une par ligne : SPY US Equity | ETF SPDR S&amp;P 500" style="min-height:70px"></textarea></div>
   <div class="row"><label>Date d'entree<input type="date" id="addDate"></label><button id="btnPreview">Apercu</button><button id="btnAdd" class="primary">Ajouter</button><span id="addInfo" class="muted"></span></div></div>
  <div class="card scroll"><div class="row"><input id="filter" placeholder="Filtrer…" class="grow">
   <label>Statut<select id="fStatus"><option value="">tous</option><option value="active">actifs</option><option value="deprecated">deprecated</option></select></label></div>
-  <table id="tm"><thead><tr><th data-sort>Ticker</th><th data-sort>Statut</th><th data-sort>Entree</th><th data-sort>Source</th><th data-sort>Sortie</th>
+  <table id="tm"><thead><tr><th data-sort>Ticker</th><th data-sort>Description</th><th data-sort>Statut</th><th data-sort>Entree</th><th data-sort>Source</th><th data-sort>Sortie</th>
   <th data-sort>Renommage</th><th data-sort>Derniere valeur</th><th>Fetch BBG</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
 </section>
 
@@ -77,8 +77,9 @@ async function reload() {
 }
 function renderMembers() {
   const q = $("#filter").value.toUpperCase(), st = $("#fStatus").value;
-  $("#tm tbody").innerHTML = MEMBERS.filter(m => (!q || m.ticker.includes(q)) && (!st || m.status === st)).map(m => { const t = esc(m.ticker); return `<tr>
-   <td><b>${t}</b>${m.note ? ` <span class="muted" title="${esc(m.note)}">✎</span>` : ""}</td><td>${badge(m.status === "active" ? "good" : "off", m.status === "active" ? "actif" : "deprecated")}</td>
+  $("#tm tbody").innerHTML = MEMBERS.filter(m => (!q || `${m.ticker} ${m.description} ${m.name}`.toUpperCase().includes(q)) && (!st || m.status === st)).map(m => { const t = esc(m.ticker); return `<tr>
+   <td><b>${t}</b>${m.note ? ` <span class="muted" title="${esc(m.note)}">✎</span>` : ""}</td>
+   <td class="desc">${m.description ? esc(m.description) : `<span class="muted"${m.name ? ` title="Nom Bloomberg (pas de description saisie)"` : ""}>${esc(m.name || "—")}</span>`} <button class="sm" title="Modifier la description" onclick="describe('${t}')">✎</button></td><td>${badge(m.status === "active" ? "good" : "off", m.status === "active" ? "actif" : "deprecated")}</td>
    <td>${m.entry || "<span class='muted'>inconnue</span>"}</td><td class="muted">${esc(m.entry_source || "")}${m.n_periods > 1 ? ` · ${m.n_periods} periodes` : ""}</td><td>${m.exit || ""} <span class="muted">${esc(m.exit_source || "")}</span></td>
    <td>${m.successor ? `→ ${esc(m.successor)} <button class="sm" onclick="unlink('${t}')">×</button>` : m.predecessor ? `← ${esc(m.predecessor)}` : ""}</td><td>${m.last_valid || "<span class='muted'>—</span>"}</td>
    <td><input type="checkbox" ${m.fetch ? "checked" : ""} onchange="put('/universes/${U}/members/${encodeURIComponent(m.ticker)}/fetch',{enabled:this.checked}).then(after('Fetch mis a jour')).catch(oops)"></td>
@@ -97,6 +98,8 @@ function askDate(msg) { const d = window.prompt(msg, today()); return d === null
 function deprecate(t) { const d = askDate(`Date de sortie de ${t} (le ticker reste extrait) :`); if (d) post(`/universes/${U}/members/${encodeURIComponent(t)}/deprecate`, {date: d}).then(after(`${t} deprecated`)).catch(oops); }
 function reactivate(t) { const d = askDate(`Date de re-entree de ${t} :`); if (d) post(`/universes/${U}/members/${encodeURIComponent(t)}/reactivate`, {date: d}).then(after(`${t} reactive`)).catch(oops); }
 function removeMember(t) { if (window.confirm(`Supprimer definitivement ${t} du registre ? (pour une faute de frappe ; un vrai sortant se deprecie)`)) api("DELETE", `/universes/${U}/members/${encodeURIComponent(t)}?rev=${META.rev}`).then(after(`${t} supprime`)).catch(oops); }
+function describe(t) { const m = MEMBERS.find(x => x.ticker === t), d = window.prompt(`Description de ${t} (vide = effacer) :`, m.description || m.name || "");
+  if (d !== null) api("PUT", `/universes/${U}/members/${encodeURIComponent(t)}/description`, {description: d}).then(after("Description enregistree")).catch(oops); }
 function linkRename(a, b) { post(`/universes/${U}/renames`, {from: a, to: b}).then(after(`${a} → ${b} lies`)).catch(oops); }
 function askRename(t) { const to = window.prompt(`Ticker successeur de ${t} (meme constituant) :`); if (to) linkRename(t, to.trim().toUpperCase()); }
 function unlink(t) { api("DELETE", `/universes/${U}/renames/${encodeURIComponent(t)}?rev=${META.rev}`).then(after("Lien supprime")).catch(oops); }
@@ -140,6 +143,7 @@ async function runsTab() { const rs = await api("GET", `/universes/${U}/runs`);
    <td>${esc((r.date_range || []).join(" → "))}</td><td class="num">${r.n_requested}</td><td>${bad.map(([k, n]) => `${esc(k)}: ${n}`).join(", ")}</td>
    <td>${(r.fx_missing || []).length || ""}</td><td class="minus" style="white-space:normal">${esc(r.error || "")}</td></tr>`; }).join("") || `<tr><td colspan="9" class="muted">Aucun run enregistre.</td></tr>`; }
 
+const descOf = t => { const m = MEMBERS.find(x => x.ticker === t); return m ? m.description || m.name || "" : ""; };
 const CAT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"];
 const COLOR = {};   // la couleur suit le ticker, pas son rang : un filtre ne repeint pas les series restantes
 function colorOf(t) { if (!(t in COLOR)) COLOR[t] = CAT[Object.keys(COLOR).length % CAT.length]; return COLOR[t]; }
@@ -154,12 +158,12 @@ async function dataTab(keepSelection) {
   const q = new URLSearchParams({field: $("#dField").value, layer, transform: $("#dTransform").value, tickers: picked.join(",")});
   if ($("#dStart").value) q.set("start", $("#dStart").value);
   const d = await api("GET", `/universes/${U}/series?${q}`);
-  $("#dTickers").innerHTML = d.available.map(t => `<option ${d.tickers.includes(t) ? "selected" : ""}>${esc(t)}</option>`).join("");
-  $("#dLegend").innerHTML = d.tickers.map(t => `<span><i style="background:${colorOf(t)}"></i>${esc(t)}</span>`).join("");
+  $("#dTickers").innerHTML = d.available.map(t => `<option value="${esc(t)}" ${d.tickers.includes(t) ? "selected" : ""}>${esc(t)}${descOf(t) ? " — " + esc(descOf(t)) : ""}</option>`).join("");
+  $("#dLegend").innerHTML = d.tickers.map(t => `<span title="${esc(descOf(t))}"><i style="background:${colorOf(t)}"></i>${esc(t)}</span>`).join("");
   lineChart("dChart", d.tickers.map(t => ({x: d.dates, y: d[t], name: t, color: colorOf(t), digits: 3})), $("#dTransform").value === "level" ? $("#dField").value : "base 100");
   $("#dInfo").textContent = `${d.available.length} serie(s) avec des valeurs pour « ${$("#dField").value} » (${layer}) sur ${MEMBERS.length} tickers au registre.` + (d.available.length > 8 ? " 8 affichees : choisir dans la liste." : "");
   const n = d.dates.length, rows = [...Array(Math.min(15, n)).keys()].map(i => n - 1 - i);
-  $("#dTable thead").innerHTML = `<tr><th>Date</th>${d.tickers.map(t => `<th class="num">${esc(t)}</th>`).join("")}</tr>`;
+  $("#dTable thead").innerHTML = `<tr><th>Date</th>${d.tickers.map(t => `<th class="num" title="${esc(descOf(t))}">${esc(t)}</th>`).join("")}</tr>`;
   $("#dTable tbody").innerHTML = rows.map(i => `<tr><td>${d.dates[i]}</td>${d.tickers.map(t => `<td class="num">${d[t][i] == null ? "—" : d[t][i].toLocaleString("fr", {maximumFractionDigits: 4})}</td>`).join("")}</tr>`).join("");
 }
 const LOADERS = {data: () => dataTab(false), overview: charts, quality: qualityTab, history: historyTab, runs: runsTab, composition: async () => {}};
@@ -172,7 +176,7 @@ $("#ewLayer").onchange = $("#ewPit").onchange = () => charts().catch(fail); $("#
 $("#btnFetch").onclick = () => put(`/universes/${U}/fetch`, {enabled: !META.fetch_enabled}).then(after("Fetch Bloomberg mis a jour")).catch(oops);
 $("#btnRefresh").onclick = () => api("POST", `/universes/${U}/refresh_index`, {}).then(() => toast("Demande deposee : executee au prochain passage du loader")).catch(fail);
 $("#btnPreview").onclick = () => api("POST", `/universes/${U}/members?dry_run=1`, {text: $("#addText").value}).then(r =>
-  $("#addInfo").textContent = `${r.tickers.length} ticker(s) : ${r.tickers.join(", ")}` + (r.already_active.length ? ` · deja actifs : ${r.already_active.join(", ")}` : "") + (r.unknown_exchanges.length ? ` · places inconnues : ${r.unknown_exchanges.join(", ")}` : "")).catch(fail);
+  $("#addInfo").textContent = `${r.tickers.length} ticker(s) : ${r.tickers.join(", ")}` + (r.already_active.length ? ` · deja actifs : ${r.already_active.join(", ")}` : "") + (r.described ? ` · ${r.described} description(s)` : "") + (r.unknown_exchanges.length ? ` · places inconnues : ${r.unknown_exchanges.join(", ")}` : "")).catch(fail);
 $("#btnAdd").onclick = () => post(`/universes/${U}/members`, {text: $("#addText").value, date: $("#addDate").value || null}).then(r => { $("#addText").value = ""; toast(`${r.ops.length} ticker(s) ajoute(s)`); return reload(); }).catch(oops);
 reload().then(() => META.in_store && !META.has_price ? $('#tabs [data-tab="data"]').click() : charts()).catch(fail);
 </script>{% endblock %}

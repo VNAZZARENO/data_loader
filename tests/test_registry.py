@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from dl import registry
+from dl import registry, tickers as tk
 from dl.registry import events, ops, pit
 from dl.registry.model import RegistryError, Universe
 
@@ -130,3 +130,32 @@ def test_guardrail_also_catches_unrelated_membership():
     with pytest.raises(RegistryError, match="Garde-fou"):
         ops.apply_index_diff(u, bonds)
     assert ops.apply_index_diff(u, bonds, force=True)[0].deprecated_tickers() == ["GTEUR2Y Govt", "ESTR Index"]
+
+
+def test_descriptions_catalogue_shared_across_universes_and_seed(share, tmp_path):
+    from dl import descriptions
+
+    eq = ops.create("eq", ["MC FP"])                              # suffixe " Equity"
+    mixed = ops.create("mixed", ["MC FP Equity", "SPX Index"], ticker_suffix="")
+    assert descriptions.set_many({"MC FP Equity": "  LVMH :  luxe ", "SPX Index": "S&P 500"}) == ["MC FP Equity", "SPX Index"]
+    assert descriptions.for_universe(eq) == {"MC FP": "LVMH : luxe"}        # meme ticker, meme texte
+    assert descriptions.for_universe(mixed) == {"MC FP Equity": "LVMH : luxe", "SPX Index": "S&P 500"}
+    assert descriptions.set_many({"SPX Index": ""}) == ["SPX Index"] and "SPX Index" not in descriptions.load()
+
+    seed = tmp_path / "seed.yaml"
+    seed.write_text('MC FP Equity: "texte du depot"\nVIX Index: "VIX"\n', encoding="utf-8")
+    assert descriptions.seed(dry_run=True, path=seed) == ["VIX Index"]
+    assert descriptions.seed(path=seed) == ["VIX Index"]                    # la saisie manuelle est gardee
+    assert descriptions.seed(overwrite=True, path=seed) == []               # ... meme avec --overwrite
+    seed.write_text('VIX Index: "VIX (Cboe)"\n', encoding="utf-8")
+    assert descriptions.seed(path=seed) == [] and descriptions.seed(overwrite=True, path=seed) == ["VIX Index"]
+    assert descriptions.load() == {"MC FP Equity": "LVMH : luxe", "VIX Index": "VIX (Cboe)"}
+    assert registry.list_universes() == []                                  # le catalogue n'est pas un univers
+
+
+def test_seed_file_is_valid():
+    from dl import descriptions
+
+    items = descriptions.read_seed()
+    assert len(items) > 200 and all(d.strip() and len(d) <= descriptions.MAX_LEN for d in items.values())
+    assert all(t.rsplit(" ", 1)[-1] in tk.YELLOW_KEYS for t in items)

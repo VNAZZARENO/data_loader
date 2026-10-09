@@ -29,6 +29,18 @@ def parse_list(text: str) -> list[str]:
     return [p.strip() for p in _SPLIT.split(text) if p.strip() and p.strip().lower() != "ticker"]
 
 
+def split_descriptions(text: str) -> tuple[str, dict[str, str]]:
+    """Lignes « TICKER | description » -> (texte sans les descriptions, {ticker brut: description})."""
+    lines, described = [], {}
+    for line in text.splitlines():
+        left, sep, right = line.partition("|")
+        if sep and left.strip() and right.strip():
+            described[left.strip()] = right.strip()
+            line = left
+        lines.append(line)
+    return "\n".join(lines), described
+
+
 def normalize(
     raw: list[str],
     ticker_suffix: str = " Equity",

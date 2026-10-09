@@ -2,6 +2,19 @@
 
 ## 2026-10-09
 
+### Added
+- **Description par ticker** (`dl/descriptions.py`) : catalogue partagé
+  `<partage>/univers/descriptions.json`, clé = ticker Bloomberg complet, donc commun à tous
+  les univers et hors du registre (aucun changement de schéma de `registry/<u>.json`).
+  Dashboard : colonne « Description » dans l'onglet Composition (édition ✎, filtre), syntaxe
+  `TICKER | description` à l'ajout et à la création, description dans la liste des séries de
+  l'onglet Données ; à défaut, nom Bloomberg des données de référence en gris.
+  `config/ticker_descriptions.yaml` : 281 descriptions de base (taux, swaps, inflation, crédit,
+  change, matières premières, indices, volatilité, actions d'`option_europe`), poussées par
+  `python -m dl.descriptions seed`. Les entrées « A VERIFIER » signalent une identité ou une
+  unité non confirmée, dont `ESTR Index` (`euro_credit`), que Bloomberg identifie comme un
+  indice actions Espagne et non comme le taux €STR (`ESTRON Index`).
+
 ### Changed
 - **Un univers = une liste de champs = une passe par soir.** La liste de champs d'un
   univers se déclare dans `universe_overrides.<u>.fields` et la passe du soir

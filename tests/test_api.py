@@ -160,3 +160,19 @@ def test_series_nonfinite_values_and_zero_rebase_are_json_null(client):
     assert result.status_code == 200
     assert result.json()["AAA FP"] == [1, None, None]
     assert result.json()["last"]["AAA FP"] is None
+
+
+def test_member_descriptions(client):
+    r = client.post("/api/universes/demo/members?dry_run=1", json={"text": "rop sw equity | Roche, bon\nAAA FP"}).json()
+    assert r["tickers"] == ["ROP SE", "AAA FP"] and r["described"] == 1
+    client.post("/api/universes/demo/members", json={"text": "rop sw equity | Roche, bon de jouissance", "rev": 1})
+    rows = {m["ticker"]: m for m in client.get("/api/universes/demo/members").json()}
+    assert rows["ROP SE"]["description"] == "Roche, bon de jouissance" and rows["AAA FP"]["description"] == ""
+    rev = registry.load("demo").rev
+    put = client.put("/api/universes/demo/members/AAA FP/description", json={"description": "Societe AAA"})
+    assert put.json() == {"ticker": "AAA FP", "description": "Societe AAA"} and registry.load("demo").rev == rev
+    assert {m["ticker"]: m["description"] for m in client.get("/api/universes/demo/members").json()}["AAA FP"] == "Societe AAA"
+    assert client.put("/api/universes/demo/members/ZZZ/description", json={"description": "x"}).status_code == 404
+    client.post("/api/universes", json={"name": "mixte", "source": "paste", "ticker_suffix": "",
+                                        "text": "SPY US Equity | ETF SPDR S&P 500\nSPX Index"})
+    assert client.get("/api/universes/mixte/members").json()[0]["description"] == "ETF SPDR S&P 500"

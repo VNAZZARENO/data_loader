@@ -7,7 +7,7 @@ import math
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
-from dl import manifests, quality, registry, requests_apply, requests_queue as rq, store, tickers as tk
+from dl import descriptions, manifests, quality, registry, requests_apply, requests_queue as rq, store, tickers as tk
 from dl.registry import events, ops
 from dl.registry.model import RegistryError
 
@@ -53,6 +53,16 @@ def _exchange_map() -> dict:
     return cfg().get("index_members", {}).get("exchange_code_map", {})
 
 
+def _normalize_described(text: str, extra: list[str], suffix: str) -> tuple[dict, dict[str, str]]:
+    """Normalise un collage dont les lignes peuvent porter « TICKER | description ».
+    Retourne (resultat de normalize, {ticker Bloomberg complet: description})."""
+    text, raw_desc = tk.split_descriptions(text)
+    norm = tk.normalize(tk.parse_list(text) + extra, suffix, _exchange_map(), _known_exchanges())
+    described = {descriptions.key(norm["changed"].get(raw, raw), suffix): d for raw, d in raw_desc.items()
+                 if norm["changed"].get(raw, raw) in norm["tickers"]}
+    return norm, described
+
+
 # -- lecture ---------------------------------------------------------------
 
 @router.get("/health")
@@ -83,8 +93,12 @@ def universe(universe: str):
 
 @router.get("/universes/{universe}/members")
 def members(universe: str):
-    _load(universe)
-    return cache.cached(universe, "members", lambda: quality.ticker_quality(universe, cfg()))
+    u = _load(universe)
+    rows = cache.cached(universe, "members", lambda: quality.ticker_quality(universe, cfg()))
+    # hors cache : une description s'edite sans changer la rev du registre
+    desc, ref = descriptions.for_universe(u, cfg()), store.read_refdata(universe, cfg())
+    names = ref["name"].dropna().to_dict() if "name" in ref.columns else {}
+    return [{**r, "description": desc.get(r["ticker"], ""), "name": names.get(r["ticker"], "")} for r in rows]
 
 
 @router.get("/universes/{universe}/events")
@@ -172,11 +186,13 @@ def normalize(body: dict = Body(...)):
 @router.post("/universes/{universe}/members")
 def add_members(universe: str, body: dict = Body(...), dry_run: bool = False):
     u = _load(universe)
-    norm = tk.normalize(tk.parse_list(body.get("text", "")) + list(body.get("tickers", [])),
-                        u.ticker_suffix, _exchange_map(), _known_exchanges())
+    norm, described = _normalize_described(body.get("text", ""), list(body.get("tickers", [])), u.ticker_suffix)
     if dry_run:
-        return {**norm, "already_active": [t for t in norm["tickers"] if t in set(u.active_tickers())]}
-    return {**_mutate(universe, body.get("rev"), lambda x: ops.add(x, norm["tickers"], body.get("date"))), **norm}
+        return {**norm, "described": len(described),
+                "already_active": [t for t in norm["tickers"] if t in set(u.active_tickers())]}
+    out = {**_mutate(universe, body.get("rev"), lambda x: ops.add(x, norm["tickers"], body.get("date"))), **norm}
+    descriptions.set_many(described, actor="dashboard", config=cfg())
+    return out
 
 
 @router.post("/universes/{universe}/members/{ticker}/deprecate")
@@ -203,6 +219,19 @@ def universe_fetch(universe: str, body: dict = Body(...)):
 def update_member(universe: str, ticker: str, body: dict = Body(...)):
     return _mutate(universe, body.get("rev"),
                    lambda u: ops.update_member(u, ticker, body.get("periods"), body.get("note")))
+
+
+@router.put("/universes/{universe}/members/{ticker}/description")
+def member_description(universe: str, ticker: str, body: dict = Body(...)):
+    """Catalogue partage entre univers (dl.descriptions), hors registre : pas de rev."""
+    u = _load(universe)
+    try:
+        u.require(ticker)
+    except RegistryError as e:
+        raise HTTPException(404, str(e))
+    text = str(body.get("description") or "")
+    descriptions.set_many({descriptions.key(ticker, u.ticker_suffix): text}, actor="dashboard", config=cfg())
+    return {"ticker": ticker, "description": descriptions.for_universe(u, cfg()).get(ticker, "")}
 
 
 @router.delete("/universes/{universe}/members/{ticker}")
@@ -260,7 +289,7 @@ def create_universe(body: dict = Body(...)):
         request = None
         if source == "paste":
             suffix = body.get("ticker_suffix", " Equity")
-            norm = tk.normalize(tk.parse_list(body.get("text", "")), suffix, _exchange_map(), _known_exchanges())
+            norm, described = _normalize_described(body.get("text", ""), [], suffix)
             if not norm["tickers"]:
                 raise HTTPException(422, "Aucun ticker dans la liste")
             u = ops.create(name, norm["tickers"], ticker_suffix=suffix, benchmark=body.get("benchmark") or None,
@@ -287,6 +316,8 @@ def create_universe(body: dict = Body(...)):
             raise HTTPException(422, f"Source inconnue: {source}")
         saved = registry.save(u, None, [{"op": "create", "source": source, "n": len(u.members)}],
                               actor="dashboard", source=f"create:{source}", config=c)
+        if source == "paste":
+            descriptions.set_many(described, actor="dashboard", config=c)
         if source == "index":
             request = rq.submit("index_members", name, {"index": u.source["index"]}, config=c)
     except registry.RevConflict as e:

@@ -169,6 +169,7 @@ Trois briques partagent des fichiers sous `<partage>/univers/` (`X:\Quant\Data` 
 |---|---|---|
 | `registry/<u>.json` + `_events/` | dashboard | composition datée, deprecated, liens de renommage, journal |
 | `requests/{pending,claimed,done,failed,applied,rejected}/` | les deux | demandes `INDX_MEMBERS` |
+| `descriptions.json` | dashboard, `dl.descriptions seed` | description par ticker, commune à tous les univers |
 | `runs/<u>/` | loader | manifestes (échecs, absents, FX manquant) |
 | `store/<u>/layer=/field=/<année>.parquet` | loader | données `raw`, `fx_eur`, `clean` |
 
@@ -188,6 +189,20 @@ python -m dl.store info --universe sxxr
 python bloomberg_loader.py --process-requests        # poste Bloomberg : dépile les demandes
 bash dashboard/start_dashboard.sh                    # http://127.0.0.1:7016
 .venv/bin/python -m pytest                           # suite complète
+```
+
+**Descriptions par ticker.** Chaque ticker peut porter une description (« SPY US Equity » =
+ETF SPDR S&P 500 ; « EUSA10 Curncy » = taux de swap EUR 10 ans). Elle appartient au ticker
+Bloomberg complet et non à l'univers : `EUR003M Index` a le même texte dans `global_macro` et
+`euro_credit`. Saisie dans l'onglet Composition (bouton ✎, ou `TICKER | description` à l'ajout et
+à la création d'un univers) ; sans description, le dashboard affiche en gris le nom Bloomberg des
+données de référence. Les descriptions de base sont versionnées dans
+`config/ticker_descriptions.yaml` et poussées par `python -m dl.descriptions seed`
+(`--dry-run`, `--overwrite` ; une saisie du dashboard n'est jamais écrasée).
+
+```python
+from dl import descriptions, registry
+descriptions.for_universe(registry.load("global_macro"))   # {ticker: description}
 ```
 
 Un deprecated reste extrait tant que son interrupteur « Fetch BBG » est actif ; un

@@ -14,7 +14,7 @@ h2{font-size:18px;margin:0 0 4px}h3{font-size:14px;margin:0 0 8px}.sub{color:var
 .scroll{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
 th{text-align:left;color:var(--ink2);font-weight:600;border-bottom:1px solid var(--axis);padding:6px 8px;white-space:nowrap;cursor:default}
 th[data-sort]{cursor:pointer}td{border-bottom:1px solid var(--grid);padding:6px 8px;white-space:nowrap}
-td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}tr:hover td{background:#f3f2ee}
+td.desc{white-space:normal;min-width:220px;max-width:460px}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}tr:hover td{background:#f3f2ee}
 .badge{display:inline-flex;align-items:center;gap:4px;border-radius:10px;padding:1px 8px;font-size:12px;border:1px solid var(--grid);color:var(--ink2);background:#fff}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block}.good .dot{background:var(--good)}.warn .dot{background:var(--warn)}
 .serious .dot{background:var(--serious)}.crit .dot{background:var(--crit)}.off .dot{background:var(--muted)}
