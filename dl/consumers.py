@@ -64,6 +64,39 @@ def load(path: str | os.PathLike | None = None, config_path: str | os.PathLike |
     return Doc(consumers, p)
 
 
+def load_default() -> Doc:
+    """consumers.yaml du deploiement : DL_CONSUMERS, sinon a cote de la config (DL_CONFIG ou depot)."""
+    return load(os.environ.get("DL_CONSUMERS") or None, config_path=os.environ.get("DL_CONFIG"))
+
+
+def summary(universe: str, doc: Doc) -> dict:
+    """Compte des consommateurs distincts d'un univers, par statut, avec leurs libelles."""
+    seen: dict[str, dict] = {}
+    for cid, _ in doc.by_universe().get(universe, []):
+        seen.setdefault(cid, doc.consumers[cid])
+    by_status: dict[str, int] = {}
+    for c in seen.values():
+        by_status[str(c.get("status", "?"))] = by_status.get(str(c.get("status", "?")), 0) + 1
+    return {"n": len(seen), "by_status": by_status, "labels": [c.get("label", cid) for cid, c in seen.items()]}
+
+
+def rows(universe: str, doc: Doc, config: dict) -> dict:
+    """Une ligne par lecture declaree sur l'univers, avec les champs attendus non collectes."""
+    collected = set(universe_fields(universe, config)) | IMPLICIT_FIELDS
+    out, warnings = [], []
+    for cid, r in doc.by_universe().get(universe, []):
+        c = doc.consumers[cid]
+        missing = ([f for f in (r.get("fields") or []) if f not in collected]
+                   if r.get("artefact") in ("xlsx", "store") else [])
+        out.append({"id": cid, "label": c.get("label", cid), "kind": c.get("kind"), "status": c.get("status"),
+                    "schedule": c.get("schedule"), "repo": c.get("repo"), "entry": c.get("entry"),
+                    "artefact": r.get("artefact"), "fields": list(r.get("fields") or []), "via": r.get("via"),
+                    "missing_fields": missing, "notes": c.get("notes", ""), "evidence": list(c.get("evidence") or [])})
+        if missing:
+            warnings.append(f"{c.get('label', cid)} attend {', '.join(missing)} : hors de la liste de champs de l'univers")
+    return {"rows": out, "warnings": warnings}
+
+
 def universe_fields(universe: str, config: dict) -> list[str]:
     """Liste de champs collectee par la passe sans --agents (meme regle que le loader)."""
     ov = (config.get("universe_overrides") or {}).get(universe) or {}

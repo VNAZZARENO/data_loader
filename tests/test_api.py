@@ -176,3 +176,26 @@ def test_member_descriptions(client):
     client.post("/api/universes", json={"name": "mixte", "source": "paste", "ticker_suffix": "",
                                         "text": "SPY US Equity | ETF SPDR S&P 500\nSPX Index"})
     assert client.get("/api/universes/mixte/members").json()[0]["description"] == "ETF SPDR S&P 500"
+
+
+def test_consumers_endpoint_and_listing(client, monkeypatch, tmp_path):
+    import yaml
+    from dashboard import settings
+    p = tmp_path / "consumers.yaml"
+    p.write_text(yaml.safe_dump({"version": 1, "consumers": {
+        "a": {"label": "Outil A", "kind": "service", "status": "actif", "schedule": "18:00",
+              "reads": [{"universe": "demo", "artefact": "xlsx", "fields": ["price", "EPS"]}]},
+        "b": {"label": "Outil B", "kind": "cron", "status": "en_echec",
+              "reads": [{"universe": "demo", "artefact": "api", "fields": ["price"]},
+                        {"universe": "other", "artefact": "api", "fields": ["price"]}]}}}, allow_unicode=True))
+    monkeypatch.setenv("DL_CONSUMERS", str(p))
+    monkeypatch.setattr(settings, "config", lambda: {"index_members": {"exchange_code_map": {}}, "agents": {"default": {}},
+                                                     "fields": {"price": "PX_LAST"}, "universes": {"available": ["demo"]}})
+    u = client.get("/api/universes").json()[0]
+    assert u["consumers"] == {"n": 2, "by_status": {"actif": 1, "en_echec": 1}, "labels": ["Outil A", "Outil B"]}
+    assert client.get("/api/universes/demo").json()["consumers"]["n"] == 2
+    d = client.get("/api/universes/demo/consumers").json()
+    assert [r["id"] for r in d["rows"]] == ["a", "b"] and d["rows"][0]["missing_fields"] == ["EPS"] and d["rows"][1]["missing_fields"] == []
+    assert d["warnings"] == ["Outil A attend EPS : hors de la liste de champs de l'univers"]
+    assert client.get("/api/universes/nope/consumers").status_code == 404
+    assert 'data-tab="consumers"' in client.get("/u/demo").text and "<th>Consommateurs</th>" in client.get("/").text

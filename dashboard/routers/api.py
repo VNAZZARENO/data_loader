@@ -7,7 +7,7 @@ import math
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
-from dl import descriptions, manifests, quality, registry, requests_apply, requests_queue as rq, store, tickers as tk
+from dl import consumers, descriptions, manifests, quality, registry, requests_apply, requests_queue as rq, store, tickers as tk
 from dl.registry import events, ops
 from dl.registry.model import RegistryError
 
@@ -75,10 +75,12 @@ def health():
 @router.get("/universes")
 def universes():
     pending = rq.list_("pending", config=cfg()) + rq.list_("done", config=cfg())
+    doc = consumers.load_default()
     out = []
     for name in registry.list_universes(cfg()):
         s = quality.summary(name, cfg())
         s["open_requests"] = sum(1 for r in pending if r["universe"] == name)
+        s["consumers"] = consumers.summary(name, doc)
         out.append(s)
     return out
 
@@ -88,7 +90,16 @@ def universe(universe: str):
     u = _load(universe)
     return {**quality.summary(universe, cfg()), "ticker_suffix": u.ticker_suffix,
             "derived_from": u.derived_from, "fields_profile": u.fields_profile,
-            "rename_candidates": ops.rename_candidates(u)}
+            "rename_candidates": ops.rename_candidates(u),
+            "consumers": consumers.summary(universe, consumers.load_default())}
+
+
+@router.get("/universes/{universe}/consumers")
+def universe_consumers(universe: str):
+    """Qui lit cet univers (config/consumers.yaml) : une ligne par lecture, champs attendus non collectes."""
+    _load(universe)
+    doc = consumers.load_default()
+    return {"summary": consumers.summary(universe, doc), **consumers.rows(universe, doc, cfg())}
 
 
 @router.get("/universes/{universe}/members")
