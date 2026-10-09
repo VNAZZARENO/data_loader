@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-ARTEFACTS = ("xlsx", "store", "refdata", "api", "registry")
+ARTEFACTS = ("xlsx", "store", "refdata", "api", "registry", "csv")
 STATUSES = ("actif", "donnees_figees", "en_echec", "dormant", "mort", "ponctuel")
 KINDS = ("prod", "shadow", "service", "cron", "research", "procedure", "dormant")
 # Champs servis par le store ou l'API sans figurer dans la liste de champs d'un univers.
