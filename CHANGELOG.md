@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-10-10
+
+### Fixed
+- **Feuille `benchmark` du classeur par défaut : schéma fixe** (`xlsx_benchmark_fields`, par
+  défaut `[price, Pxtobook, EPS]`, surcharge possible par univers). Le 09/10 au soir, `div_yield`
+  entré dans la liste de champs de `sxxr` a ajouté une colonne à cette feuille ; le gel V6/GBT
+  d'ATLAS compare les colonnes de toutes les feuilles à l'identique et a arrêté les shadows V6
+  (19 h 15) et atlas_gbt_v1 (19 h 45) avant toute écriture. Les autres champs de l'indice ne vont
+  plus que dans le store ; les onglets par champ du classeur sont inchangés ; un classeur de
+  profil (`--agents`) garde tous les champs du profil. S'applique aux deux chemins d'écriture
+  (extraction directe et export depuis le store). Effectif sur le poste Bloomberg après `git pull`.
+  Côté ATLAS, le gel projette désormais la feuille `benchmark` sur ses colonnes gelées (correctif
+  à appliquer par Vincent, voir le runbook GBT du 10/10).
+
 ## 2026-10-09
 
 ### Added

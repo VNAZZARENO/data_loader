@@ -353,3 +353,27 @@ def test_field_left_behind_is_caught_up_from_its_watermark(store_cfg, fake_blp, 
     clean = store.read("sx5e", "shares_out", layer="clean")
     assert clean.loc["2024-12-02":"2025-01-31"].notna().all().all()
     assert _latest(share)["status"] == "ok"
+
+
+def test_default_workbook_benchmark_sheet_keeps_a_fixed_schema(store_cfg, fake_blp, share):
+    # 09/10/2026 : div_yield ajoute a la liste sxxr a ajoute une colonne a la feuille benchmark
+    # et le gel V6/GBT (colonnes comparees a l'identique) a arrete les deux shadows.
+    from dl import store
+    cfg = yaml.safe_load(store_cfg.read_text())
+    base = dict(cfg["fields"])
+    cfg["universe_overrides"] = {"sx5e": {"fields": {**base, "div_yield": "EQY_DVD_YLD_12M"}}}
+    cfg["agents"] = {"conviction": {"fields": {"price": "PX_LAST", "div_yield": "EQY_DVD_YLD_12M"}}}
+    store_cfg.write_text(yaml.safe_dump(cfg))
+    nightly = bl.ATLASBloombergLoader(str(store_cfg), universe="sx5e", end_date_override="2025-03-31",
+                                      blp_module=fake_blp)
+    nightly.run()
+    book = pd.ExcelFile(nightly.output_path)
+    assert "div_yield" in book.sheet_names                                   # un onglet par champ
+    bm = pd.read_excel(nightly.output_path, sheet_name="benchmark", index_col=0)
+    assert list(bm.columns) == list(base)                                    # feuille benchmark : schema fixe
+    assert store.read_benchmark("sx5e")["div_yield"].notna().any()           # l'indice garde le champ au store
+    adhoc = bl.ATLASBloombergLoader(str(store_cfg), universe="sx5e", end_date_override="2025-03-31",
+                                    blp_module=fake_blp, agents="conviction")
+    adhoc.run()
+    bm = pd.read_excel(adhoc.output_path, sheet_name="benchmark", index_col=0)
+    assert sorted(bm.columns) == ["div_yield", "price"]                      # classeur de profil : tel quel

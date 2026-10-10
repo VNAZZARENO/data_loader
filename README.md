@@ -310,7 +310,7 @@ One xlsx per universe at the path configured in `paths.output_xlsx`:
 X:\Quant\Data\ATLAS_data_{universe}_static.xlsx
 ```
 
-Each file contains a `parameters` sheet plus one data sheet per field.
+Each file contains a `parameters` sheet plus one data sheet per field, and a `benchmark` sheet whose columns are fixed by `xlsx_benchmark_fields` (default `price`, `Pxtobook`, `EPS`) whatever the universe field list: the ATLAS V6/GBT freeze compares these columns and refuses any change. Other benchmark fields go to the store only.
 
 ## Project structure
 

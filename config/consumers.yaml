@@ -43,7 +43,7 @@ consumers:
       - {universe: sxxr, artefact: xlsx, fields: [price, EPS, Pxtobook, benchmark], via: "copie gelee state/shadow_v6_r1/inputs (scripts/stoxx600_v6_freeze_inputs.py)"}
       - {universe: sxxr, artefact: refdata, fields: [sector, currency], via: "copie gelee"}
     evidence: ["bin/cron_shadow_stoxx600_v6.sh:31-33", "scripts/stoxx600_v6_freeze_inputs.py:25", "src/atlas/data/v6.py:51-69"]
-    notes: "Les revisions historiques de la source sont ignorees et tracees ; secteurs jamais rafraichis."
+    notes: "Les revisions historiques de la source sont ignorees et tracees ; secteurs jamais rafraichis. Le gel compare les colonnes des quatre feuilles a l'identique : une colonne div_yield ajoutee a la feuille benchmark le 09/10/2026 a arrete V6 et atlas_gbt_v1 ce soir-la (copies gelees intactes) ; depuis, la feuille benchmark du classeur garde le schema xlsx_benchmark_fields."
   atlas_gbt_v1_shadow:
     label: "ATLAS atlas_gbt_v1 (shadow GBT, copie gelee)"
     kind: shadow
@@ -56,7 +56,7 @@ consumers:
       - {universe: sxxr, artefact: store, fields: [shares_out, div_yield, announcement_dt], via: "layer=clean, copie append-only"}
       - {universe: sxxr, artefact: refdata, fields: [sector, currency], via: "copie gelee, faite une seule fois a l'initialisation"}
     evidence: ["strategies/atlas_gbt_v1/strategy.yaml:19-24", "src/atlas_gbt/inputs.py:43-77", "src/atlas_gbt/inputs.py:103-144", "bin/cron_shadow_atlas_gbt_v1.sh:37", "scripts/stoxx600_v6_freeze_inputs.py:96-111"]
-    notes: "Champs du store figes au 07/08/2026 jusqu'au rattrapage de la passe sxxr (liste de champs du 09/10/2026). Seule l'etape de gel lit le store du partage ; secteurs jamais rafraichis, comme V6."
+    notes: "Champs du store rattrapes par la passe sxxr du 09/10/2026 (45 seances comblees depuis le 07/08) ; copie append-only faite a l'etape de gel, qui a echoue le 09/10 au soir sur la feuille benchmark du classeur (voir atlas_v6_shadow) : rattrapage au prochain passage reussi. Seule l'etape de gel lit le store du partage ; secteurs jamais rafraichis, comme V6."
   atlas_psc_shadow:
     label: "ATLAS PSC conviction (shadow)"
     kind: shadow

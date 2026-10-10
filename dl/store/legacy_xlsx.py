@@ -63,9 +63,16 @@ def write_workbook(path, parameters: dict, sheets: dict[str, pd.DataFrame], benc
 
 def export(universe: str, path: str | Path, field_aliases: list[str], parameters: dict,
            tickers: list[str] | None = None, config=None, test=False, only_listed: bool = False,
-           no_ffill: set[str] | None = None, empty_columns: list[str] | None = None) -> dict:
+           no_ffill: set[str] | None = None, empty_columns: list[str] | None = None,
+           benchmark_fields: list[str] | None = None) -> dict:
+    """``benchmark_fields`` : schéma fixe de la feuille benchmark (les gels V6/GBT comparent ses
+    colonnes) ; ``None`` écrit tous les champs demandés (classeur de profil)."""
     sheets, bench = build_sheets(universe, field_aliases, tickers, config, test, only_listed, no_ffill,
                                  empty_columns)
+    if benchmark_fields is not None and bench is not None and not bench.empty:
+        keep = [c for c in benchmark_fields if c in bench.columns]
+        if keep and set(bench.columns) - set(keep):
+            bench = bench[keep]
     if all(df.empty for df in sheets.values()):
         raise ValueError(f"Store vide pour {universe} : export xlsx refuse")
     smbio.atomic_write_via(path, lambda tmp: write_workbook(tmp, parameters, sheets, bench))

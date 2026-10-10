@@ -36,6 +36,12 @@ fields:
   Pxtobook: PX_TO_BOOK_RATIO
   EPS: IS_EPS
 
+# Feuille benchmark du classeur par défaut ATLAS_data_<u>_static.xlsx : schéma fixe, quelle que
+# soit la liste de champs de l'univers (les gels V6/GBT comparent ses colonnes et refusent toute
+# différence : V6 et atlas_gbt_v1 arrêtés le 09/10/2026 par une colonne div_yield). Les autres
+# champs de l'indice ne vont que dans le store. Surcharge possible dans universe_overrides.<u>.
+xlsx_benchmark_fields: [price, Pxtobook, EPS]
+
 # Profils de champs (--agents <nom>) : extractions PONCTUELLES de recherche et profil
 # par defaut des univers crees dans le dashboard (fields_profile). Aucune passe
 # planifiee n'en depend : les champs collectes chaque soir sont ceux de l'univers.

@@ -130,6 +130,11 @@ class ATLASBloombergLoader:
         # xbbg defaults or session-wide output settings.
         self.bdh_options = {**self.bdh_options, "backend": "pandas", "format": "wide"}
         self.fields = self._resolve_fields(overrides)
+        # Classeur par défaut : la feuille benchmark garde un schéma fixe quelle que soit
+        # la liste de champs de l'univers (les gels V6/GBT comparent ses colonnes) ; les
+        # autres champs de l'indice ne vont que dans le store.
+        self.xlsx_benchmark_fields = list(overrides.get(
+            "xlsx_benchmark_fields", self.config.get("xlsx_benchmark_fields", self.config["fields"])))
         self.no_ffill_fields = set(
             overrides.get("no_ffill_fields", self.config["bloomberg"].get("no_ffill_fields", []))
         )
@@ -729,6 +734,21 @@ class ATLASBloombergLoader:
         }
         logger.info(f"Output written: {self.output_path}")
 
+    def _xlsx_benchmark_view(self, benchmark: pd.DataFrame) -> pd.DataFrame:
+        """Feuille benchmark du classeur par défaut : colonnes de ``xlsx_benchmark_fields`` seulement.
+
+        Un classeur de profil (``--agents``) garde tous les champs du profil. Si aucune
+        colonne configurée n'est présente, la feuille est écrite telle quelle plutôt que vide.
+        """
+        if self.agents:
+            return benchmark
+        keep = [c for c in self.xlsx_benchmark_fields if c in benchmark.columns]
+        dropped = [c for c in benchmark.columns if c not in keep]
+        if not keep or not dropped:
+            return benchmark
+        logger.info(f"  Sheet 'benchmark': {dropped} kept out of the workbook (store only)")
+        return benchmark[keep]
+
     def _write_xlsx_to(self, path, results: dict[str, pd.DataFrame], benchmark: pd.DataFrame | None) -> None:
         with pd.ExcelWriter(path, engine="openpyxl") as writer:
             # parameters sheet
@@ -749,6 +769,7 @@ class ATLASBloombergLoader:
 
             # benchmark sheet
             if benchmark is not None and not benchmark.empty:
+                benchmark = self._xlsx_benchmark_view(benchmark)
                 benchmark.index.name = "Date"
                 benchmark.to_excel(writer, sheet_name="benchmark")
                 logger.info(
@@ -911,6 +932,7 @@ class ATLASBloombergLoader:
                                       only_listed=bool(self._xlsx_exclude),
                                       empty_columns=self._xlsx_placeholders,
                                       no_ffill=self.no_ffill_fields,
+                                      benchmark_fields=None if self.agents else self.xlsx_benchmark_fields,
                                       config=self.config, test=self.test)
             self._manifest.xlsx = {**info, "seconds": round(time.monotonic() - t0, 2), "source": "store"}
             logger.info(f"Output written from store: {self.output_path}")
