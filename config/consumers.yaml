@@ -101,7 +101,7 @@ consumers:
     reads:
       - {universe: global_macro, artefact: xlsx, fields: [price]}
     evidence: ["envs/shadow.yaml:68", "src/atlas_macro/data/loader.py:14", "src/atlas_macro/data/catalog.py:246-257"]
-    notes: "Catalogue fail-fast de 97 colonnes ; l'etape 1 du wrapper appelle l'ancien collecteur de SecretProject (chemin X:) et echoue a chaque tir depuis le 15/06 ; la fraicheur depend d'une passe global_macro faite avant 10:00 (FATAL stale les 07 et 08/10/2026). Le cron relit aussi le classeur dans scripts/macro_v2_paper_nav.py et macro_weights_ytd_plot.py."
+    notes: "Catalogue fail-fast de 105 colonnes (dont 8 series credit exclues, ajoutees a global_macro le 13/10/2026) ; l'etape 1 du wrapper appelle l'ancien collecteur de SecretProject (chemin X:) et echoue a chaque tir depuis le 15/06 ; la fraicheur depend d'une passe global_macro faite avant 10:00 (FATAL stale les 07 et 08/10/2026). Le cron relit aussi le classeur dans scripts/macro_v2_paper_nav.py et macro_weights_ytd_plot.py."
   atlas_research_sxxr:
     label: "ATLAS recherche et outils dev (backtests, v5 robustesse, v6 audit, ml_forecaster)"
     kind: research

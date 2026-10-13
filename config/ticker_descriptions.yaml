@@ -63,6 +63,7 @@ FRSWI5 Curncy: "Swap d'inflation française zéro coupon 5 ans (IPC France hors 
 BPSWIT1 Curncy: "Swap d'inflation GBP zéro coupon 1 an (RPI britannique), en %"
 BPSWIT5 Curncy: "Swap d'inflation GBP zéro coupon 5 ans (RPI britannique), en %"
 FWISUS55 Index: "Swap d'inflation USD 5 ans dans 5 ans (forward 5y5y) : anticipation d'inflation de long terme, en %"
+FWISEU55 Index: "Swap d'inflation EUR 5 ans dans 5 ans (forward 5y5y) : anticipation d'inflation de long terme, en %"
 USGGBE02 Index: "Point mort d'inflation US 2 ans (breakeven) : rendement Treasury nominal moins TIPS, en %"
 USGGBE05 Index: "Point mort d'inflation US 5 ans (breakeven) : rendement Treasury nominal moins TIPS, en %"
 USGGBE10 Index: "Point mort d'inflation US 10 ans (breakeven) : rendement Treasury nominal moins TIPS, en %"
@@ -76,6 +77,12 @@ ECCPEMUY Index: "Inflation zone euro : HICP tous postes (MUICP Eurostat), glisse
 CPEXEMUY Index: "Inflation sous-jacente zone euro : HICP hors énergie, alimentation, alcool et tabac (Eurostat), glissement annuel, en %"
 FRCPEECY Index: "Inflation France : IPC harmonisé européen (IPCH), glissement annuel, en %"
 UKRPCJYR Index: "Inflation Royaume-Uni : CPI, glissement annuel, non désaisonnalisé, en %"
+
+# ---------------------------------------------------------------- Activité et emploi (séries ECO)
+GDP CYOY Index: "PIB réel US : glissement annuel, série trimestrielle (BEA), en %"
+EUGNEMUY Index: "PIB réel zone euro : glissement annuel, série trimestrielle (Eurostat), en %"
+USURTOT Index: "Taux de chômage US (U-3, BLS), mensuel, désaisonnalisé, en %"
+UMRTEMU Index: "Taux de chômage zone euro (Eurostat), mensuel, désaisonnalisé, en %"
 
 # ---------------------------------------------------------------- Crédit
 ITRX EUR CDSI GEN 5Y Corp: "iTraxx Europe 5 ans, série courante (générique on-the-run) : indice de CDS sur 125 émetteurs européens investment grade, spread en pb"
@@ -94,6 +101,13 @@ LECPTREU Index: "Bloomberg Euro-Aggregate Corporate : obligations d'entreprises 
 HE00 Index: "ICE BofA Euro High Yield : obligations d'entreprises high yield en euro, EUR"
 MERHE00 Index: "ICE BofA Euro High Yield (obligations d'entreprises high yield en euro). A VERIFIER : ticker absent des données de référence du store, le ticker confirmé pour cet indice est HE00 Index"
 LF98TRUU Index: "Bloomberg US Corporate High Yield : obligations d'entreprises high yield en dollar, total return, USD non couvert"
+LUACTRUU Index: "Bloomberg US Corporate : obligations d'entreprises investment grade en dollar, total return, USD non couvert"
+LP01TREU Index: "Bloomberg Pan-European High Yield : obligations d'entreprises high yield européennes, total return, EUR"
+QW81 Index: "iBoxx EUR Corporates BBB, total return, EUR (benchmark candidat KRYS). A VERIFIER : identité à confirmer sur le terminal (DES)"
+LUACOAS Index: "Bloomberg US Corporate (investment grade en dollar) : spread OAS moyen de l'indice. A VERIFIER : unité de PX_LAST (% ou pb)"
+LECPOAS Index: "Bloomberg Euro-Aggregate Corporate (investment grade en euro) : spread OAS moyen de l'indice. A VERIFIER : unité de PX_LAST (% ou pb)"
+LF98OAS Index: "Bloomberg US Corporate High Yield : spread OAS moyen de l'indice. A VERIFIER : unité de PX_LAST (% ou pb)"
+LP01OAS Index: "Bloomberg Pan-European High Yield : spread OAS moyen de l'indice. A VERIFIER : unité de PX_LAST (% ou pb)"
 JPEI3MEU Index: "A VERIFIER : Bloomberg identifie ce ticker comme un indice « JPM ESG Global HY Corporate Custom… » (nom tronqué), devise EUR. Probablement un indice JPMorgan high yield global ESG, couvert ou converti en EUR"
 IBXXCHF3 Index: "NON IDENTIFIE : Bloomberg ne renvoie aucun nom pour ce ticker (NAME = IBXXCHF3, devise USD). Vraisemblablement un indice iBoxx, à identifier sur le terminal"
 IEAG NA Equity: "ETF iShares € Aggregate Bond ESG (UCITS, coté à Amsterdam) : obligations investment grade en euro, États et entreprises, EUR"

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-13
+
+### Added
+- **13 tickers au registre** (demande de suivi macro et crédit). `macro` (rev 2, 45 membres) :
+  `GDP CYOY`, `EUGNEMUY`, `USURTOT`, `UMRTEMU` (séries ECO, avec consensus) et `FWISEU55`.
+  `global_macro` (rev 12, 104 membres) : `LUACOAS`, `LECPOAS`, `LF98OAS`, `LP01OAS` (spreads OAS),
+  `LUACTRUU`, `LECPTREU`, `LP01TREU` et `QW81` (total return ; `QW81` = benchmark candidat KRYS,
+  `LECPTREU` reste aussi dans `euro_credit`). Descriptions au catalogue ; unité des OAS et identité
+  de `QW81` à vérifier sur le terminal. L'historique remonte depuis `start_date` à la première passe.
+  Côté ATLAS, les 8 séries crédit sont cataloguées `excluded` (`atlas_macro/data/catalog.py`) :
+  sans cela le fail-fast du shadow macro de 10:00 refuse le classeur.
+
 ## 2026-10-10
 
 ### Fixed
