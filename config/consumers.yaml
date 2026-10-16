@@ -242,6 +242,20 @@ consumers:
       - {universe: macro, artefact: store, fields: [price], via: "paquet macro"}
     evidence: ["routers/api.py:150-172", "macro_bridge.py:12-20"]
     notes: ""
+  pergamtools_macro_monitor:
+    label: "Macro, moniteur actions (scores par pilier, indice et region)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/Macro
+    entry: "scripts/run_monitor.py (via GetMacroData /api/refresh?job=monitor, cron 12:30)"
+    schedule: "12:30 lun-ven"
+    reads:
+      - {universe: market_monitor, artefact: store, fields: [price, best_pe, pb, best_eps, mcap, ivol], via: "layer=clean, parquet lu directement"}
+      - {universe: sxxr, artefact: store, fields: [price], via: "layer=clean, breadth (part des titres au-dessus de la moyenne 200 jours)"}
+      - {universe: spx, artefact: store, fields: [price], via: "layer=clean, breadth (des que le store a des prix)"}
+      - {universe: nky, artefact: store, fields: [price], via: "layer=clean, breadth (des que le store a des prix)"}
+    evidence: ["macro/monitor/data.py", "macro/monitor/breadth.py", "config/monitor.yaml"]
+    notes: "Recalcule tout l'historique depuis 2013 a chaque run ; un ticker absent retire seulement ses indicateurs (avertissement dans data/store/monitor/status.yaml)."
   pergamtools_vigie:
     label: "Vigie (coeur sur le lab)"
     kind: service

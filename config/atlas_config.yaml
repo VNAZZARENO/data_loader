@@ -127,6 +127,7 @@ universes:
     - igv
     - euro_credit
     - option_europe
+    - market_monitor
 universe_overrides:
   # sxxr (STOXX 600) : liste de champs de l'univers, collectee en entier par la passe
   # du soir (`--universe sxxr --daily`, sans --agents) dans le store unique
@@ -214,6 +215,25 @@ universe_overrides:
       survey_n: BN_SURVEY_NUMBER_OBSERVATIONS
       release_dt: ECO_RELEASE_DT
     sparse_fields: [actual_release, survey_median, survey_high, survey_low, survey_n, release_dt]
+  # Moniteur actions de pergam-tools/Macro (2026-10-16) : indices (niveau, valorisation, capitalisation,
+  # volatilité implicite 30 jours à la monnaie) et séries de zone (surprises Citi, PMI composites, taux 10 ans,
+  # CDS IG, sentiment US, change pour convertir les capitalisations). Champs d'indice creux : absents des
+  # séries de zone sans rendre le run partial. Lecteur : voir config/consumers.yaml (pergamtools_macro_monitor).
+  market_monitor:
+    ticker_suffix: ''
+    fx_layer: false
+    stale_tail: false
+    ew_index:
+      enabled: false
+      reason: "Indice equal-weight indisponible : cet univers melange indices actions, series economiques, taux, spreads et change."
+    fields:
+      price: PX_LAST
+      best_pe: BEST_PE_RATIO
+      pb: PX_TO_BOOK_RATIO
+      best_eps: BEST_EPS
+      mcap: CUR_MKT_CAP
+      ivol: '30DAY_IMPVOL_100.0%MNY_DF'
+    sparse_fields: [best_pe, pb, best_eps, mcap, ivol]
   # IV-surface universe for OTM put / volatility-tail work (PEQ).
   # Mixed equities + indices -> ticker_suffix '' (full tickers in CSV).
   # NOTE: the moneyness mnemonics (*_IMPVOL_*%MNY_DF) must be validated

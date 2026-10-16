@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-16
+
+### Added
+- **Univers `market_monitor`** (lecteur : moniteur actions de `pergam-tools/Macro`, voir
+  `pergamtools_macro_monitor` dans `config/consumers.yaml`). 55 tickers (`tickers/market_monitor.csv`) :
+  16 indices actions (`PX_LAST`, `BEST_PE_RATIO`, `PX_TO_BOOK_RATIO`, `BEST_EPS`, `CUR_MKT_CAP`, vol implicite
+  30 jours à la monnaie), surprises Citi, PMI composites, taux 10 ans, CDS IG, sentiment US (VIX, VIX3M,
+  put/call, SKEW, AAII) et change pour convertir les capitalisations. Champs d'indice creux
+  (`sparse_fields`), pas de couche `fx_eur`, `stale_tail: false`. Tickers PMI et champ de vol implicite à
+  valider au premier run (manifeste) ; PMI suisse à chercher au terminal.
+
 ## 2026-10-13
 
 ### Added
