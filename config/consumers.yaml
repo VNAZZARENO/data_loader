@@ -6,7 +6,7 @@
 # plus produite), en_echec, dormant, mort, ponctuel. Les preuves sont des fichier:ligne
 # relatifs au depot du consommateur, releves le 2026-10-09.
 version: 1
-updated: 2026-10-09
+updated: 2026-10-16
 consumers:
   # ---------------------------------------------------------------- ATLAS (QR/ATLAS)
   atlas_v4_shadow:
@@ -326,3 +326,14 @@ consumers:
       - {universe: global_macro, artefact: xlsx, fields: [price]}
     evidence: ["run_lpes_monthly.py:34", "run_lpes_monthly.py:41-47", "~/.claude/skills/commentaire-hebdo/SKILL.md:112"]
     notes: "Procedure GSM trimestrielle : memes series via l'API (GSM/CLAUDE_GSM.md:158-163)."
+  reporting_hebdo:
+    label: "Reporting_Hebdo (metriques et graphes vs benchmark, PEQ PSC PBH)"
+    kind: procedure
+    status: actif
+    repo: /home/vincent/QR/Reporting_Hebdo
+    entry: reporting_hebdo.py
+    schedule: "hebdomadaire, lundi, manuel (cron commente)"
+    reads:
+      - {universe: benchmarks_bbg, artefact: store, fields: [price], via: "layer=raw, parquet lu directement"}
+    evidence: ["reporting_hebdo.py:43-45", "reporting_hebdo.py:156", "reporting_hebdo.py:56", "reporting_hebdo.py:62", "reporting_hebdo.py:68"]
+    notes: "Lit EURNE Index (PEQ) et WLSNRE Index (PSC, PBH) depuis le 2026-10-16 ; lisait avant le classeur manuel Divers/benchmarks_bbg.xlsx, que lisent encore GetFundPerformances, Reporting_Mensuel, NAV middle_share_nav et Contribution GSM."

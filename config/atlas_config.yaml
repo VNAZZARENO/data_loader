@@ -152,6 +152,21 @@ universe_overrides:
     fx_layer: false   # actifs heterogenes : pas de couche fx_eur
     fields:
       price: PX_LAST
+  # Benchmarks des fonds (2026-10-16) : remplace le classeur manuel
+  # Divers/benchmarks_bbg.xlsx (BDH PX_LAST collees en valeurs dans la feuille static).
+  # Niveaux dans la devise de cotation de l'indice, comme les BDH du classeur (WLSNRE est
+  # publie en EUR, WLSN en USD) : pas de couche fx_eur. Un indice ne meurt pas : stale_tail
+  # false garde un niveau inchange (indice obligataire un jour ferie) dans la couche clean.
+  # Lecteurs : Reporting_Hebdo (couche raw, lue directement) ; voir config/consumers.yaml.
+  benchmarks_bbg:
+    ticker_suffix: ''
+    fx_layer: false
+    stale_tail: false
+    ew_index:
+      enabled: false
+      reason: "Indice equal-weight indisponible : cet univers reunit les indices de reference des fonds (actions, obligations), en devises differentes."
+    fields:
+      price: PX_LAST
   euro_credit:
     ew_index:
       enabled: false
