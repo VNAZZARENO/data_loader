@@ -251,6 +251,8 @@ consumers:
     schedule: "12:30 lun-ven"
     reads:
       - {universe: market_monitor, artefact: store, fields: [price, best_pe, pb, best_eps, mcap, ivol], via: "layer=clean, parquet lu directement"}
+      - {universe: global_macro, artefact: store, fields: [price], via: "layer=clean, repli des prix absents de market_monitor (taux 10 ans, CDS IG, VIX, VIX3M, SKEW, EURUSD, CHFUSD, USDJPY)"}
+      - {universe: macro, artefact: store, fields: [price], via: "layer=clean, repli (GBPUSD)"}
       - {universe: sxxr, artefact: store, fields: [price], via: "layer=clean, breadth (part des titres au-dessus de la moyenne 200 jours)"}
       - {universe: spx, artefact: store, fields: [price], via: "layer=clean, breadth (des que le store a des prix)"}
       - {universe: nky, artefact: store, fields: [price], via: "layer=clean, breadth (des que le store a des prix)"}
