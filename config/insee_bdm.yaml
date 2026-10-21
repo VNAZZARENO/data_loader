@@ -1,0 +1,63 @@
+# Séries INSEE BDM de l'univers hotellerie_fr (fréquentation hôtelière, méthode de redressement 2019).
+# Source : https://bdm.insee.fr/series/sdmx/data/SERIES_BDM/<idbank+...>, ouverte, sans clé.
+# Idbanks relevés le 2026-10-21 (dernière observation 2026-08, LAST_UPDATE 2026-10-13).
+# unit_measure / unit_mult : valeurs attendues des attributs SDMX ; un écart arrête la passe.
+# Zones : régions et départements des établissements LHTP (Pergam Hospitality I et II).
+universe: hotellerie_fr
+label: "Hôtellerie France (INSEE, fréquentation mensuelle)"
+start: "2011-01"
+zones:
+  FR_METRO: "France métropolitaine"
+  IDF: "Île-de-France"
+  ARA: "Auvergne-Rhône-Alpes"
+  BFC: "Bourgogne-Franche-Comté"
+  GES: "Grand Est"
+  D74: "Haute-Savoie"
+  D05: "Hautes-Alpes"
+  D21: "Côte-d'Or"
+  D67: "Bas-Rhin"
+  D78: "Yvelines"
+  D75: "Paris"
+fields:
+  taux_occupation:
+    unit: "% des chambres offertes"
+    unit_measure: POURCENT
+    unit_mult: "0"
+    idbanks: {FR_METRO: "010599343", IDF: "010599060", ARA: "010599105", BFC: "010599100", GES: "010599102",
+              D74: "010599004", D05: "010598900", D21: "010598917", D67: "010598997", D78: "010599008", D75: "010599005"}
+  nuitees:
+    unit: "milliers de nuitées"
+    unit_measure: SO
+    unit_mult: "3"
+    idbanks: {FR_METRO: "010598551", IDF: "010598547", ARA: "010598653", BFC: "010598617", GES: "010598635",
+              D74: "010598699", D05: "010598822", D21: "010599024", D67: "010599341", D78: "010598723", D75: "010598705"}
+  nuitees_non_residents:
+    unit: "milliers de nuitées"
+    unit_measure: SO
+    unit_mult: "3"
+    idbanks: {FR_METRO: "010598564", IDF: "010598561", ARA: "010598655", D74: "010598700", D05: "010598823", D75: "010598706"}
+  chambres_offertes:
+    unit: "milliers de chambres-nuits du mois"
+    unit_measure: SO
+    unit_mult: "3"
+    idbanks: {FR_METRO: "010609648", IDF: "010609659", ARA: "010609669", BFC: "010609661", GES: "010609664"}
+  chambres_occupees:
+    unit: "milliers de chambres-nuits du mois"
+    unit_measure: SO
+    unit_mult: "3"
+    idbanks: {FR_METRO: "010609616", IDF: "010609627", ARA: "010609637", BFC: "010609629", GES: "010609632"}
+  nuitees_4_5_etoiles:
+    unit: "milliers de nuitées"
+    unit_measure: SO
+    unit_mult: "3"
+    idbanks: {FR_METRO: "010609589"}
+  nuitees_independants:
+    unit: "milliers de nuitées"
+    unit_measure: SO
+    unit_mult: "3"
+    idbanks: {FR_METRO: "010609593"}
+  nuitees_chaine:
+    unit: "milliers de nuitées"
+    unit_measure: SO
+    unit_mult: "3"
+    idbanks: {FR_METRO: "010609591"}
