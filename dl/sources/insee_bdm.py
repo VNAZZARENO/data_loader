@@ -72,3 +72,34 @@ def fetch(idbanks: list[str], start: str, *, get=httpx.get, chunk: int = 20) -> 
         r.raise_for_status()
         out.update(parse_sdmx(r.text))
     return out
+
+
+class UniteInattendue(ValueError):
+    """L'INSEE ne sert plus la série comme le YAML l'attend (unité, multiplicateur, absence)."""
+
+
+def to_frames(spec: dict, series: dict[str, dict]) -> tuple[dict[str, pd.DataFrame], list[dict]]:
+    """Séries par idbank -> un tableau dates x zones par champ, et le relevé de la passe.
+
+    Tout ou rien : une seule série non conforme arrête la passe, pour qu'un
+    champ ne mélange jamais deux unités dans le store.
+    """
+    frames: dict[str, pd.DataFrame] = {}
+    releve: list[dict] = []
+    for champ, f in spec["fields"].items():
+        cols = {}
+        for ticker, idbank in f["idbanks"].items():
+            s = series.get(idbank)
+            if s is None:
+                raise UniteInattendue(f"{champ}/{ticker}: série {idbank} absente de la réponse INSEE")
+            if (s["unit_measure"], s["unit_mult"]) != (f["unit_measure"], str(f["unit_mult"])):
+                raise UniteInattendue(
+                    f"{champ}/{ticker}: série {idbank} en {s['unit_measure']} x10^{s['unit_mult']},"
+                    f" attendu {f['unit_measure']} x10^{f['unit_mult']}")
+            cols[ticker] = s["points"]
+            last = s["points"].index.max()
+            releve.append({"field": champ, "ticker": ticker, "idbank": idbank, "title": s["title"],
+                           "unit": f["unit"], "last_update": s["last_update"], "n_obs": int(len(s["points"])),
+                           "last": None if pd.isna(last) else last.date().isoformat()})
+        frames[champ] = pd.DataFrame(cols).sort_index()
+    return frames, releve

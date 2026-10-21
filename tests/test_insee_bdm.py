@@ -43,3 +43,31 @@ def test_fetch_par_paquets():
     insee_bdm.fetch([f"{i:09d}" for i in range(45)], "2026-01", get=faux_get, chunk=20)
     assert len(vus) == 3
     assert "startPeriod=2026-01" in vus[0] and vus[0].count("+") == 19
+
+
+def _serie(unit_measure="POURCENT", unit_mult="0"):
+    return {"title": "t", "unit_measure": unit_measure, "unit_mult": unit_mult, "last_update": "2026-10-13",
+            "points": pd.Series([60.0, 61.5], index=pd.to_datetime(["2026-07-31", "2026-08-31"]))}
+
+
+SPEC_MINI = {"universe": "hotellerie_fr", "zones": {"FR_METRO": "France", "D74": "Haute-Savoie"},
+             "fields": {"taux_occupation": {"unit": "%", "unit_measure": "POURCENT", "unit_mult": "0",
+                                            "idbanks": {"FR_METRO": "000000001", "D74": "000000002"}}}}
+
+
+def test_to_frames_tickers_en_colonnes():
+    frames, releve = insee_bdm.to_frames(SPEC_MINI, {"000000001": _serie(), "000000002": _serie()})
+    df = frames["taux_occupation"]
+    assert list(df.columns) == ["FR_METRO", "D74"]
+    assert df.loc["2026-08-31", "D74"] == 61.5
+    assert {r["ticker"] for r in releve} == {"FR_METRO", "D74"} and releve[0]["n_obs"] == 2
+
+
+def test_unite_differente_arrete_la_passe():
+    with pytest.raises(insee_bdm.UniteInattendue, match="000000002"):
+        insee_bdm.to_frames(SPEC_MINI, {"000000001": _serie(), "000000002": _serie(unit_mult="3")})
+
+
+def test_serie_absente_arrete_la_passe():
+    with pytest.raises(insee_bdm.UniteInattendue, match="absente"):
+        insee_bdm.to_frames(SPEC_MINI, {"000000001": _serie()})
