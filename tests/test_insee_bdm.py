@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from dl import registry, store
 from dl.sources import insee_bdm
 
 FIXTURE = Path(__file__).parent / "fixtures" / "insee_bdm_sample.xml"
@@ -71,3 +72,55 @@ def test_unite_differente_arrete_la_passe():
 def test_serie_absente_arrete_la_passe():
     with pytest.raises(insee_bdm.UniteInattendue, match="absente"):
         insee_bdm.to_frames(SPEC_MINI, {"000000001": _serie()})
+
+
+def _faux_get_pour(spec):
+    """Rend, pour chaque idbank demandé, deux mois de valeurs à l'unité attendue."""
+    attendu = {i: (f["unit_measure"], str(f["unit_mult"])) for f in spec["fields"].values()
+               for i in f["idbanks"].values()}
+
+    class R:
+        status_code = 200
+
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            pass
+
+    def get(url, **kw):
+        ids = url.rsplit("/", 1)[1].split("?")[0].split("+")
+        series = "".join(
+            f'<Series IDBANK="{i}" FREQ="M" TITLE_FR="s{i}" LAST_UPDATE="2026-10-13" '
+            f'UNIT_MEASURE="{attendu[i][0]}" UNIT_MULT="{attendu[i][1]}">'
+            f'<Obs TIME_PERIOD="2026-08" OBS_VALUE="70.5"/><Obs TIME_PERIOD="2026-07" OBS_VALUE="68"/></Series>'
+            for i in ids)
+        return R(f'<m:StructureSpecificData xmlns:m="x"><m:DataSet>{series}</m:DataSet></m:StructureSpecificData>')
+    return get
+
+
+def test_ingest_ecrit_le_store_et_cree_l_univers_sans_collecte_bloomberg(share):
+    spec = insee_bdm.load_spec()
+    man = insee_bdm.ingest(spec, get=_faux_get_pour(spec))
+    u = registry.load("hotellerie_fr")
+    assert u.fetch_enabled is False and u.ticker_suffix == ""
+    assert set(u.active_tickers()) == set(spec["zones"])
+    df = store.read("hotellerie_fr", "taux_occupation")
+    assert df.loc["2026-08-31", "D74"] == 70.5
+    assert man["written"]["taux_occupation"] == [2026]
+    assert (share / "univers" / "runs" / "hotellerie_fr" / "latest_insee.json").is_file()
+
+
+def test_ingest_idempotent_et_revision_ecrasee(share):
+    spec = insee_bdm.load_spec()
+    insee_bdm.ingest(spec, get=_faux_get_pour(spec))
+    insee_bdm.ingest(spec, get=_faux_get_pour(spec))
+    assert registry.load("hotellerie_fr").rev == 1
+    assert len(store.read("hotellerie_fr", "nuitees")) == 2
+
+
+def test_dry_run_n_ecrit_rien(share):
+    spec = insee_bdm.load_spec()
+    man = insee_bdm.ingest(spec, get=_faux_get_pour(spec), dry_run=True)
+    assert not registry.exists("hotellerie_fr")
+    assert man["written"] == {}

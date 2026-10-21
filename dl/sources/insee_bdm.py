@@ -10,12 +10,19 @@ qu'un lecteur interpréterait de travers.
 
 from __future__ import annotations
 
+import argparse
+import datetime as dt
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import httpx
 import pandas as pd
 import yaml
+
+from .. import paths, registry, smbio
+from ..registry import ops
+from ..store import writer
 
 REPO = Path(__file__).resolve().parents[2]
 SPEC = REPO / "config" / "insee_bdm.yaml"
@@ -103,3 +110,66 @@ def to_frames(spec: dict, series: dict[str, dict]) -> tuple[dict[str, pd.DataFra
                            "last": None if pd.isna(last) else last.date().isoformat()})
         frames[champ] = pd.DataFrame(cols).sort_index()
     return frames, releve
+
+
+ENTREE = "2011-01-01"
+
+
+def ensure_universe(spec: dict, config=None):
+    """Univers du registre : créé une fois, collecte Bloomberg coupée.
+
+    fetch_enabled = False est ce qui protège l'univers du chargeur Bloomberg
+    (bloomberg_loader.py saute un univers désactivé) : ses tickers sont des
+    zones INSEE, pas des instruments.
+    """
+    name, zones = spec["universe"], list(spec["zones"])
+    if not registry.exists(name, config):
+        u = ops.create(name, zones, label=spec["label"], kind="list", ticker_suffix="",
+                       source={"type": "insee_bdm", "config": "config/insee_bdm.yaml"},
+                       date=ENTREE, entry_source="manual")
+        u, op_fetch = ops.toggle_fetch(u, False)
+        return registry.save(u, None, [{"op": "create", "tickers": zones}, *op_fetch],
+                             actor="insee_bdm", source="insee_bdm", config=config)
+    u = registry.load(name, config)
+    manquants = [z for z in zones if z not in u.active_tickers()]
+    if not manquants:
+        return u
+    rev = u.rev
+    u, op_add = ops.add(u, manquants, ENTREE, "manual")
+    return registry.save(u, rev, op_add, actor="insee_bdm", source="insee_bdm", config=config)
+
+
+def ingest(spec: dict | None = None, *, get=httpx.get, dry_run: bool = False, config=None) -> dict:
+    """Une passe complète depuis spec["start"] : l'INSEE révise ses derniers mois
+    (OBS_STATUS « P »), relire tout l'historique les remplace sans autre logique."""
+    spec = spec or load_spec()
+    idbanks = [i for f in spec["fields"].values() for i in f["idbanks"].values()]
+    frames, releve = to_frames(spec, fetch(idbanks, spec["start"], get=get))
+    man = {"universe": spec["universe"], "fields": list(frames), "series": releve, "written": {},
+           "at": dt.datetime.now(dt.timezone.utc).isoformat(), "dry_run": dry_run}
+    if dry_run:
+        return man
+    name = spec["universe"]
+    ensure_universe(spec, config)
+    for champ, wide in frames.items():
+        man["written"][champ] = writer.upsert_long(name, "raw", champ, wide, config=config)
+        writer.update_state(name, champ, wide, config=config)
+    ref = pd.DataFrame({"name": spec["zones"], "currency": "", "sector": "Hôtellerie (INSEE)"})
+    writer.write_refdata(name, ref, config=config)
+    smbio.atomic_write_json(paths.runs_dir(name, config) / "latest_insee.json", man)
+    return man
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--dry-run", action="store_true", help="lit l'INSEE et contrôle les unités, n'écrit rien")
+    args = ap.parse_args(argv)
+    man = ingest(dry_run=args.dry_run)
+    for r in man["series"]:
+        print(f"{r['field']:<24} {r['ticker']:<9} {r['idbank']} {r['n_obs']:>4} obs, dernière {r['last']}")
+    print("écrit:" if man["written"] else "rien écrit (--dry-run)", man["written"] or "")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
