@@ -168,6 +168,25 @@ universe_overrides:
       reason: "Indice equal-weight indisponible : cet univers reunit les indices de reference des fonds (actions, obligations), en devises differentes."
     fields:
       price: PX_LAST
+  # Hôtellerie France : séries INSEE BDM (dl/sources/insee_bdm.py, config/insee_bdm.yaml), hors
+  # Bloomberg. Le registre porte fetch_enabled: false, le chargeur ne le collecte donc jamais.
+  # Les champs ci-dessous doivent rester égaux à ceux de config/insee_bdm.yaml (test).
+  hotellerie_fr:
+    ticker_suffix: ''
+    fx_layer: false
+    stale_tail: false
+    ew_index:
+      enabled: false
+      reason: "Indice equal-weight sans objet : séries de fréquentation hôtelière par zone (taux, nuitées), pas des prix."
+    fields:
+      taux_occupation: INSEE_BDM
+      nuitees: INSEE_BDM
+      nuitees_non_residents: INSEE_BDM
+      chambres_offertes: INSEE_BDM
+      chambres_occupees: INSEE_BDM
+      nuitees_4_5_etoiles: INSEE_BDM
+      nuitees_independants: INSEE_BDM
+      nuitees_chaine: INSEE_BDM
   euro_credit:
     ew_index:
       enabled: false

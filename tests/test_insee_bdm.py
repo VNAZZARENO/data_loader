@@ -2,11 +2,13 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+import yaml as _yaml
 
-from dl import registry, store
+from dl import consumers, registry, store
 from dl.sources import insee_bdm
 
 FIXTURE = Path(__file__).parent / "fixtures" / "insee_bdm_sample.xml"
+REPO = Path(__file__).resolve().parents[1]
 
 
 def test_spec_couvre_des_zones_connues():
@@ -124,3 +126,17 @@ def test_dry_run_n_ecrit_rien(share):
     man = insee_bdm.ingest(spec, get=_faux_get_pour(spec), dry_run=True)
     assert not registry.exists("hotellerie_fr")
     assert man["written"] == {}
+
+
+def test_champs_declares_dans_la_config_egaux_au_yaml_insee():
+    cfg = _yaml.safe_load((REPO / "config" / "atlas_config.yaml").read_text(encoding="utf-8"))
+    spec = insee_bdm.load_spec()
+    assert consumers.universe_fields("hotellerie_fr", cfg) == list(spec["fields"])
+
+
+def test_consommateurs_hotellerie_sans_erreur():
+    cfg = _yaml.safe_load((REPO / "config" / "atlas_config.yaml").read_text(encoding="utf-8"))
+    doc = consumers.load(config_path=REPO / "config" / "consumers.yaml")
+    found = [f for f in consumers.check(doc, cfg) if f.universe == "hotellerie_fr" and f.level != "INFO"]
+    assert found == []
+    assert {c for c, _ in doc.by_universe()["hotellerie_fr"]} == {"vigie_hotellerie", "trame"}

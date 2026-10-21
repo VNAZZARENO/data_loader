@@ -80,6 +80,16 @@ collecté). Le fichier est tenu à la main : tout nouveau lecteur d'une sortie d
 s'y déclare, tout arrêt y change le statut. Origine : audit univers → consommateurs du
 2026-10-09 (`docs/2026-10-09-audit-univers-consommateurs.md`).
 
+### Univers hors Bloomberg : `hotellerie_fr` (INSEE)
+
+`hotellerie_fr` réunit des séries mensuelles de fréquentation hôtelière de l'INSEE (taux d'occupation,
+nuitées, chambres) par zone : France métropolitaine et régions ou départements des hôtels de LHTP. Il est
+alimenté par `python -m dl.sources.insee_bdm` (`--dry-run` pour contrôler sans écrire), à partir de
+`config/insee_bdm.yaml`, et le registre lui coupe la collecte Bloomberg (`fetch_enabled: false`). Chaque passe
+relit l'historique depuis 2011 : les révisions de l'INSEE remplacent les valeurs provisoires. Une unité
+différente de celle du YAML arrête la passe sans rien écrire. Relevé de la dernière passe :
+`univers/runs/hotellerie_fr/latest_insee.json`.
+
 ### CLI flags
 
 | Flag | Description |

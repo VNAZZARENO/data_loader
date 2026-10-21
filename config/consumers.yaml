@@ -6,7 +6,7 @@
 # plus produite), en_echec, dormant, mort, ponctuel. Les preuves sont des fichier:ligne
 # relatifs au depot du consommateur, releves le 2026-10-09.
 version: 1
-updated: 2026-10-16
+updated: 2026-10-21
 consumers:
   # ---------------------------------------------------------------- ATLAS (QR/ATLAS)
   atlas_v4_shadow:
@@ -353,3 +353,26 @@ consumers:
       - {universe: benchmarks_bbg, artefact: store, fields: [price], via: "layer=raw, parquet lu directement"}
     evidence: ["reporting_hebdo.py:43-45", "reporting_hebdo.py:156", "reporting_hebdo.py:56", "reporting_hebdo.py:62", "reporting_hebdo.py:68"]
     notes: "Lit EURNE Index (PEQ) et WLSNRE Index (PSC, PBH) depuis le 2026-10-16 ; lisait avant le classeur manuel Divers/benchmarks_bbg.xlsx, que lisent encore GetFundPerformances, Reporting_Mensuel, NAV middle_share_nav et Contribution GSM."
+  # ---------------------------------------------------------------- Hôtellerie (pôle PE)
+  vigie_hotellerie:
+    label: "Vigie, dossier hôtellerie de loisirs et de montagne (signaux)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/Vigie
+    entry: vigie_api.py
+    schedule: "à la demande (dossier et veille Vigie, lab)"
+    reads:
+      - {universe: hotellerie_fr, artefact: store, fields: [taux_occupation, nuitees, nuitees_non_residents], via: "API DataLoader /universes/hotellerie_fr/series"}
+    evidence: ["docs/CATALOGUE-SOURCES.md:1"]
+    notes: "Créé le 2026-10-21 pour la présentation au pôle Private Equity (LHTP, Pergam Hospitality)."
+  trame:
+    label: "Trame, liaison des graphes de présentations"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/Trame
+    entry: trame_api.py
+    schedule: "à la demande (atelier)"
+    reads:
+      - {universe: hotellerie_fr, artefact: store, fields: [taux_occupation, nuitees], via: "API DataLoader /universes/{u}/series, fins de mois"}
+    evidence: ["trame/donnees.py:1"]
+    notes: "Trame lit tout univers du catalogue ; ce rattachement déclare l'usage du reporting PE."
