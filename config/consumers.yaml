@@ -220,34 +220,34 @@ consumers:
       - {universe: sxxr, artefact: xlsx, fields: [benchmark]}
     evidence: ["ingest/xlsx_client.py:33-69", "ingest/scheduler.py:138", "scripts/migrate_to_xlsx_benchmark.py:14-18"]
     notes: "Lit a 18:00:02, avant l'ecriture du classeur (18:04 au mieux) : benchmark toujours en retard d'un jour."
-  pergamtools_macro:
-    label: "Macro (nowcasts d'inflation)"
-    kind: service
-    status: actif
-    repo: /home/vincent/pergam-tools/Macro
-    entry: "scripts/run_nowcast.py --refresh (via GetMacroData /api/refresh, cron 11:45)"
-    schedule: "11:45 lun-ven"
-    reads:
-      - {universe: macro, artefact: store, fields: [price, survey_median, survey_high, survey_low, survey_n, actual_release, release_dt], via: "layer=clean, parquet lu directement"}
-    evidence: ["macro/config.py:16", "macro/sources/bbg_store.py:16", "config/bbg.yaml:6"]
-    notes: "La passe macro du poste Bloomberg est irreguliere ; le cron de 11:45 tourne aussi les jours sans extraction."
   pergamtools_getmacrodata:
-    label: "GetMacroData (service 7019, indirect via Macro)"
+    label: "GetMacroData (nowcasts d'inflation)"
     kind: service
     status: actif
     repo: /home/vincent/pergam-tools/GetMacroData
-    entry: "routers/api.py, macro_bridge.py"
-    schedule: permanent
+    entry: "scripts/run_nowcast.py --refresh (via Macro /api/refresh, cron 11:45)"
+    schedule: "11:45 lun-ven"
     reads:
-      - {universe: macro, artefact: store, fields: [price], via: "paquet macro"}
-    evidence: ["routers/api.py:150-172", "macro_bridge.py:12-20"]
-    notes: ""
-  pergamtools_macro_monitor:
-    label: "Macro, moniteur actions (scores par pilier, indice et region)"
+      - {universe: macro, artefact: store, fields: [price, survey_median, survey_high, survey_low, survey_n, actual_release, release_dt], via: "layer=clean, parquet lu directement"}
+    evidence: ["getmacrodata/config.py:16", "getmacrodata/sources/bbg_store.py:16", "config/bbg.yaml:6"]
+    notes: "La passe macro du poste Bloomberg est irreguliere ; le cron de 11:45 tourne aussi les jours sans extraction."
+  pergamtools_macro:
+    label: "Macro (service 7019, indirect via GetMacroData)"
     kind: service
     status: actif
     repo: /home/vincent/pergam-tools/Macro
-    entry: "scripts/run_monitor.py (via GetMacroData /api/refresh?job=monitor, cron 12:30)"
+    entry: "routers/api.py, macro_bridge.py"
+    schedule: permanent
+    reads:
+      - {universe: macro, artefact: store, fields: [price], via: "paquet getmacrodata"}
+    evidence: ["routers/api.py:150-172", "macro_bridge.py:12-20"]
+    notes: ""
+  pergamtools_getmacrodata_monitor:
+    label: "GetMacroData, moniteur actions (scores par pilier, indice et region)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/GetMacroData
+    entry: "scripts/run_monitor.py (via Macro /api/refresh?job=monitor, cron 12:30)"
     schedule: "12:30 lun-ven"
     reads:
       - {universe: market_monitor, artefact: store, fields: [price, best_pe, pb, best_eps, mcap, ivol], via: "layer=clean, parquet lu directement"}
@@ -256,7 +256,7 @@ consumers:
       - {universe: sxxr, artefact: store, fields: [price], via: "layer=clean, breadth (part des titres au-dessus de la moyenne 200 jours)"}
       - {universe: spx, artefact: store, fields: [price], via: "layer=clean, breadth (des que le store a des prix)"}
       - {universe: nky, artefact: store, fields: [price], via: "layer=clean, breadth (des que le store a des prix)"}
-    evidence: ["macro/monitor/data.py", "macro/monitor/breadth.py", "config/monitor.yaml"]
+    evidence: ["getmacrodata/monitor/data.py", "getmacrodata/monitor/breadth.py", "config/monitor.yaml"]
     notes: "Recalcule tout l'historique depuis 2013 a chaque run ; un ticker absent retire seulement ses indicateurs (avertissement dans data/store/monitor/status.yaml)."
   pergamtools_getcarto:
     label: "GetCarto (calcul de la carte des corrélations STOXX 600)"
