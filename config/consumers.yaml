@@ -258,6 +258,17 @@ consumers:
       - {universe: nky, artefact: store, fields: [price], via: "layer=clean, breadth (des que le store a des prix)"}
     evidence: ["macro/monitor/data.py", "macro/monitor/breadth.py", "config/monitor.yaml"]
     notes: "Recalcule tout l'historique depuis 2013 a chaque run ; un ticker absent retire seulement ses indicateurs (avertissement dans data/store/monitor/status.yaml)."
+  pergamtools_carto:
+    label: "Carto (cartographie des corrélations STOXX 600)"
+    kind: service
+    status: actif
+    repo: /home/vincent/pergam-tools/Carto
+    entry: "scripts/run_carto.py --refresh (cron 20:30, via GetCarto /api/refresh)"
+    schedule: "20:30 lun-ven"
+    reads:
+      - {universe: sxxr, artefact: store, fields: [price, benchmark], via: "paquet dl : read layer=clean, membership_mask, read_benchmark, read_fx, read_refdata"}
+    evidence: ["carto/inputs.py:19", "carto/inputs.py:26", "carto/inputs.py:32", "carto/inputs.py:39", "carto/inputs.py:43"]
+    notes: "Rendements repassés en devise locale avec read_fx. Appartenance point-in-time par membership_mask, historique antérieur à l'entrée utilisé pour l'estimation. Snapshot hebdomadaire ; le run du soir remplace celui de la semaine en cours."
   pergamtools_vigie:
     label: "Vigie (coeur sur le lab)"
     kind: service
