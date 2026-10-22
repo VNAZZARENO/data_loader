@@ -377,3 +377,35 @@ def test_default_workbook_benchmark_sheet_keeps_a_fixed_schema(store_cfg, fake_b
     adhoc.run()
     bm = pd.read_excel(adhoc.output_path, sheet_name="benchmark", index_col=0)
     assert sorted(bm.columns) == ["div_yield", "price"]                      # classeur de profil : tel quel
+
+
+def test_refdata_adds_gics_levels_and_countries_without_touching_known_values(store_cfg, fake_blp, share):
+    from dl import registry, store
+    from dl.registry import ops
+    from dl.store import writer
+
+    writer.write_refdata("sx5e", pd.DataFrame({"currency": ["EUR"], "name": ["AAA SA"], "sector": ["Finance"]},
+                                              index=["AAA FP"]))
+    fake_blp.refdata = {
+        "AAA FP Equity": {"CRNCY": "USD", "NAME": "autre nom", "GICS_SECTOR_NAME": "Financials",
+                          "GICS_INDUSTRY_GROUP_NAME": "Banques", "GICS_INDUSTRY_NAME": "Banques",
+                          "GICS_SUB_INDUSTRY_NAME": "Banques diversifiées",
+                          "CNTRY_OF_DOMICILE": "FR", "CNTRY_OF_RISK": "FR"},
+        "BBB LN Equity": {"CRNCY": "GBp", "NAME": "BBB PLC", "GICS_SECTOR_NAME": "Energie",
+                          "GICS_INDUSTRY_GROUP_NAME": "Energie", "GICS_INDUSTRY_NAME": "Pétrole, gaz",
+                          "GICS_SUB_INDUSTRY_NAME": "Pétrole et gaz intégrés",
+                          "CNTRY_OF_DOMICILE": "GB", "CNTRY_OF_RISK": "NL"}}
+    registry.save(ops.create("sx5e", ["AAA FP", "BBB LN"], date="2025-01-02"), None)
+    _loader(store_cfg, fake_blp).run()
+
+    ref = store.read_refdata("sx5e")
+    assert list(ref.loc["AAA FP", ["currency", "name", "sector"]]) == ["EUR", "AAA SA", "Finance"]
+    assert ref.at["AAA FP", "sub_industry"] == "Banques diversifiées"
+    assert ref.at["BBB LN", "sector"] == "Energie" and ref.at["BBB LN", "industry"] == "Pétrole, gaz"
+    assert list(ref.loc["BBB LN", ["country_domicile", "country_risk"]]) == ["GB", "NL"]
+    assert ref.at["AAA FP", "industry_group"] == "Banques"
+
+    fake_blp.calls.clear()
+    _loader(store_cfg, fake_blp).run()
+    assert not [c for c in fake_blp.calls if c[0] == "bdp" and "GICS_SUB_INDUSTRY_NAME" in c[2]
+                and any("AAA FP" in t for t in c[1])]

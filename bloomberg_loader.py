@@ -57,6 +57,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+
+# Référentiel par titre : champ Bloomberg -> colonne du store (_refdata.parquet).
+REF_FIELDS = {
+    "CRNCY": "currency", "NAME": "name", "GICS_SECTOR_NAME": "sector",
+    "GICS_INDUSTRY_GROUP_NAME": "industry_group", "GICS_INDUSTRY_NAME": "industry",
+    "GICS_SUB_INDUSTRY_NAME": "sub_industry",
+    "CNTRY_OF_DOMICILE": "country_domicile", "CNTRY_OF_RISK": "country_risk",
+}
+
 class ATLASBloombergLoader:
     def __init__(
         self,
@@ -669,13 +678,19 @@ class ATLASBloombergLoader:
             self._manifest.error = f"store raw '{alias}': {type(e).__name__}: {e}"
 
     def _update_refdata(self) -> None:
-        known = set(store_reader.read_refdata(self.store_universe, self.config, self.test).index)
-        todo = [t for t in self.tickers if t not in known]
+        """Champs de référence par titre (BDP). Un titre inconnu est demandé en entier ; quand une colonne de
+        REF_FIELDS manque au référentiel stocké, tous les titres sont redemandés une fois, et les valeurs déjà
+        connues (devise, nom, secteur) sont conservées : seules les cases vides sont complétées."""
+        ref = store_reader.read_refdata(self.store_universe, self.config, self.test)
+        if any(c not in ref.columns for c in REF_FIELDS.values()):
+            todo = list(self.tickers)
+        else:
+            known = set(ref.index)
+            todo = [t for t in self.tickers if t not in known]
         if not todo:
             return
         try:
-            raw = self.blp.bdp([t + self.ticker_suffix for t in todo],
-                               ["CRNCY", "NAME", "GICS_SECTOR_NAME"],
+            raw = self.blp.bdp([t + self.ticker_suffix for t in todo], list(REF_FIELDS),
                                backend="pandas", format="wide")
         except Exception as e:
             logger.warning(f"Reference data (BDP) failed, FX falls back to the exchange map: {e}")
@@ -683,10 +698,11 @@ class ATLASBloombergLoader:
         if raw is None or raw.empty:
             return
         raw.columns = [str(c).lower() for c in raw.columns]
-        df = pd.DataFrame({
-            "currency": raw.get("crncy"), "name": raw.get("name"), "sector": raw.get("gics_sector_name"),
-        })
+        df = pd.DataFrame({col: raw[f.lower()] if f.lower() in raw.columns else None for f, col in REF_FIELDS.items()},
+                          index=raw.index)
         df.index = [str(i).replace(self.ticker_suffix, "") if self.ticker_suffix else str(i) for i in raw.index]
+        old = ref.reindex(df.index).reindex(columns=df.columns)
+        df = old.combine_first(df)      # une valeur déjà connue l'emporte sur la nouvelle réponse
         store_writer.write_refdata(self.store_universe, df, self.config, self.test)
 
     def _update_fx(self) -> None:

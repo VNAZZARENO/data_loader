@@ -91,7 +91,8 @@ def update_state(universe: str, field: str, wide: pd.DataFrame, config=None, tes
 
 
 def write_refdata(universe: str, df: pd.DataFrame, config=None, test=False) -> None:
-    """``df`` indexe par ticker, colonnes currency / name / sector. Fusion avec l'existant."""
+    """``df`` indexe par ticker, colonnes currency / name / sector, et depuis le 22/10/2026 industry_group / industry /
+    sub_industry (niveaux GICS) et country_domicile / country_risk (codes pays). Fusion avec l'existant."""
     p = layout.refdata_path(universe, config, test)
     if p.is_file():
         old = pd.read_parquet(p)

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-22
+
+### Added
+- **Référentiel enrichi** (`_refdata.parquet`, lecteur : `pergam-tools/Carto`, vues Secteurs et Géographie).
+  Le BDP de référence demande en plus `GICS_INDUSTRY_GROUP_NAME`, `GICS_INDUSTRY_NAME`,
+  `GICS_SUB_INDUSTRY_NAME`, `CNTRY_OF_DOMICILE` et `CNTRY_OF_RISK`, rangés dans les colonnes
+  `industry_group`, `industry`, `sub_industry`, `country_domicile` et `country_risk` (constante
+  `REF_FIELDS` de `bloomberg_loader.py`). Au premier run après déploiement, chaque univers redemande
+  tous ses titres une fois ; devise, nom et secteur déjà connus sont conservés et seules les cases
+  vides sont complétées. Les lecteurs existants (ATLAS, tableau de bord, GetCarto) lisent leurs
+  colonnes par nom et ne sont pas touchés.
+
 ## 2026-10-16
 
 ### Added
