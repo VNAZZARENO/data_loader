@@ -65,8 +65,42 @@ def _flat_tail(s: pd.Series) -> int:
     return int(len(s) - 1 - idx[-1]) if len(idx) else len(s) - 1
 
 
+# ecart median en jours calendaires -> libelle ; un quotidien ouvre a un ecart median de 1 jour
+FREQUENCIES = ((4, "quotidienne"), (10, "hebdomadaire"), (45, "mensuelle"), (135, "trimestrielle"),
+               (270, "semestrielle"))
+
+
+def _median_gap_days(dates: pd.DatetimeIndex) -> float:
+    # pas d'asi8 : son unite suit la resolution de l'index (ns, us ou s selon la version de pandas)
+    return float(np.median(np.diff(dates.to_numpy()) / np.timedelta64(1, "D")))
+
+
+def frequency_label(dates) -> str | None:
+    """Frequence ESTIMEE d'une suite de dates (ecart median) ; None sous 3 dates."""
+    dates = pd.DatetimeIndex(dates)
+    if len(dates) < 3:
+        return None
+    gap = _median_gap_days(dates)
+    return next((label for limit, label in FREQUENCIES if gap < limit), "annuelle")
+
+
+def update_frequency(df: pd.DataFrame) -> str | None:
+    """Rythme auquel les VALEURS changent, mediane des tickers : un champ collecte chaque jour
+    mais publie chaque trimestre (EPS publie) ressort "trimestrielle". Estimation, comme frequency_label."""
+    gaps = []
+    for t in df.columns:
+        s = df[t].dropna()
+        changes = s.index[(s != s.shift()).to_numpy()]
+        if len(changes) >= 3:
+            gaps.append(_median_gap_days(changes))
+    if not gaps:
+        return None
+    gap = float(np.median(gaps))
+    return next((label for limit, label in FREQUENCIES if gap < limit), "annuelle")
+
+
 def field_quality(universe: str, layer: str = "raw", window: int = 252, config=None) -> list[dict]:
-    """Par champ : couverture sur les membres actifs, NaN% a la derniere date, bornes."""
+    """Par champ : couverture sur les membres actifs, NaN% a la derniere date, bornes, frequence estimee."""
     u = registry.load(universe, config)
     active = set(pit.spliced_columns(u)) & {t for t in u.active_tickers()} or set(u.active_tickers())
     out = []
@@ -80,6 +114,8 @@ def field_quality(universe: str, layer: str = "raw", window: int = 252, config=N
         out.append({
             "field": f, "first_date": df.index.min().date().isoformat(),
             "last_date": df.index.max().date().isoformat(),
+            "n_dates": int(len(obs := df.index[df.notna().any(axis=1)])),
+            "frequency": frequency_label(obs), "update_frequency": update_frequency(df),
             "n_tickers": int(df.shape[1]), "n_active_with_data": int(df[cols].notna().any().sum()),
             "n_active": len(active),
             "coverage_pct": round(float(recent.notna().to_numpy().mean() * 100), 2) if cols else 0.0,

@@ -36,7 +36,7 @@
 <section id="quality" hidden>
  <div class="card scroll"><div class="row"><h3 class="grow">Couverture par champ (membres actifs, 252 derniers jours)</h3>
   <label>Couche<select id="qLayer"><option>raw</option><option>fx_eur</option><option>clean</option></select></label></div>
-  <table id="tq"><thead><tr><th data-sort>Champ</th><th data-sort>Debut</th><th data-sort>Fin</th><th class="num" data-sort>Tickers</th>
+  <table id="tq"><thead><tr><th data-sort>Champ</th><th data-sort>Debut</th><th data-sort>Fin</th><th data-sort title="Estimee : ecart median entre deux dates du store">Frequence</th><th data-sort title="Estimee : rythme auquel les valeurs changent (mediane des tickers)">Mise a jour</th><th class="num" data-sort>Tickers</th>
   <th class="num" data-sort>Actifs couverts</th><th class="num" data-sort>Couverture %</th><th class="num" data-sort>NaN derniere date %</th><th>Actifs absents</th></tr></thead><tbody></tbody></table></div>
  <div class="card scroll"><h3>Tickers a regarder</h3><table id="tflags"><thead><tr><th data-sort>Ticker</th><th data-sort>Statut</th><th>Signalements</th>
   <th data-sort>1re valeur</th><th data-sort>Derniere valeur</th><th class="num" data-sort>Jours figes</th></tr></thead><tbody></tbody></table></div>
@@ -133,9 +133,9 @@ async function charts() {
                            {x: c.dates, y: c.with_price, name: "Avec un prix", color: PLOT.s2, step: true, digits: 0}], "tickers");
 }
 async function qualityTab() { const rows = await api("GET", `/universes/${U}/quality?layer=${$("#qLayer").value}`);
-  $("#tq tbody").innerHTML = rows.map(r => `<tr><td><b>${esc(r.field)}</b></td><td>${r.first_date}</td><td>${r.last_date}</td><td class="num">${r.n_tickers}</td>
+  $("#tq tbody").innerHTML = rows.map(r => `<tr><td><b>${esc(r.field)}</b></td><td>${r.first_date}</td><td>${r.last_date}</td><td>${esc(r.frequency || "—")}</td><td>${esc(r.update_frequency || "—")}</td><td class="num">${r.n_tickers}</td>
    <td class="num">${r.n_active_with_data} / ${r.n_active}</td><td class="num">${r.coverage_pct.toFixed(1)}</td><td class="num">${r.nan_last_pct.toFixed(1)}</td>
-   <td style="white-space:normal" class="muted">${esc(r.missing_active.join(", "))}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">Aucune donnee dans cette couche.</td></tr>`; sortable($("#tq")); }
+   <td style="white-space:normal" class="muted">${esc(r.missing_active.join(", "))}</td></tr>`).join("") || `<tr><td colspan="10" class="muted">Aucune donnee dans cette couche.</td></tr>`; sortable($("#tq")); }
 async function historyTab() { const cs = await api("GET", `/universes/${U}/events`);
   const pick = (c, ops) => c.ops.filter(o => ops.includes(o.op)).map(o => o.ticker);
   const cell = (a, cls) => a.length ? `<span class="${cls}">${a.length}</span> <span class="muted">${esc(a.slice(0, 12).join(", "))}${a.length > 12 ? "…" : ""}</span>` : "";

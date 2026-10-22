@@ -24,6 +24,16 @@
   Côté ATLAS, les 8 séries crédit sont cataloguées `excluded` (`atlas_macro/data/catalog.py`) :
   sans cela le fail-fast du shadow macro de 10:00 refuse le classeur.
 
+## 2026-10-12
+
+### Added
+- **Fréquence par champ** (`GET /api/universes/{u}/quality`, onglet Qualité) : `frequency`
+  (écart médian entre deux dates du store), `update_frequency` (rythme auquel les valeurs
+  changent, médiane des tickers : un champ collecté chaque jour mais publié chaque trimestre
+  ressort « trimestrielle ») et `n_dates`. Ce sont des estimations tirées des données, le
+  DataLoader ne déclare pas de périodicité. La période couverte reste `first_date` / `last_date`.
+  Lecture seule, aucune sortie du loader ne change.
+
 ## 2026-10-10
 
 ### Fixed

@@ -60,6 +60,20 @@ def test_count_series_and_quality_flags(demo):
     fq = quality.field_quality("demo")[0]
     assert fq["field"] == "price" and fq["n_active"] == 3 and fq["missing_active"] == ["GHOST NA"]
     assert fq["nan_last_pct"] == 0.0
+    assert fq["frequency"] == "quotidienne" and fq["n_dates"] == 40
+    assert fq["update_frequency"] == "quotidienne"   # DEAD FP fige ne tire pas la mediane
+
+
+def test_frequency_estimates():
+    assert quality.frequency_label(pd.bdate_range("2025-01-01", periods=2)) is None
+    for freq, label in (("B", "quotidienne"), ("W-FRI", "hebdomadaire"), ("ME", "mensuelle"),
+                        ("QE", "trimestrielle"), ("YE", "annuelle")):
+        assert quality.frequency_label(pd.date_range("2020-01-01", periods=12, freq=freq)) == label
+    # collecte quotidienne, valeur qui ne change qu'une fois par trimestre
+    idx = pd.bdate_range("2023-01-02", periods=520)
+    eps = pd.DataFrame({"AAA FP": (np.arange(520) // 65).astype(float)}, index=idx)
+    assert quality.frequency_label(idx) == "quotidienne" and quality.update_frequency(eps) == "trimestrielle"
+    assert quality.update_frequency(pd.DataFrame({"AAA FP": [1.0] * 10}, index=idx[:10])) is None
 
 
 def test_ew_index_ignores_undefined_returns_after_zero(share):
