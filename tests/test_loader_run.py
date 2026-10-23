@@ -445,3 +445,42 @@ def test_no_quote_snapshot_without_declared_fields(store_cfg, fake_blp, share):
     _loader(store_cfg, fake_blp).run()
     assert store.read_snapshot("sx5e").empty
     assert not [c for c in fake_blp.calls if c[0] == "bdp" and "PE_RATIO" in c[2]]
+
+
+def test_snapshot_failure_never_blocks_derived_layers(store_cfg, fake_blp, share, monkeypatch):
+    from dl import registry, store
+    from dl.registry import ops
+    from dl.store import writer
+
+    cfg = yaml.safe_load(store_cfg.read_text())
+    cfg.setdefault("universe_overrides", {}).setdefault("sx5e", {})["snapshot_fields"] = {"pe_ratio": "PE_RATIO"}
+    store_cfg.write_text(yaml.safe_dump(cfg))
+    fake_blp.refdata = {"AAA FP Equity": {"CRNCY": "EUR", "PE_RATIO": 17.5}}
+    registry.save(ops.create("sx5e", ["AAA FP"], date="2025-01-02"), None)
+
+    def boom(*a, **k):
+        raise OSError("partage indisponible")
+
+    monkeypatch.setattr(writer, "write_snapshot", boom)
+    _loader(store_cfg, fake_blp).run()
+    assert not store.read("sx5e", "price", layer="clean").empty
+    assert store.read_snapshot("sx5e").empty
+
+
+def test_snapshot_numbers_sent_as_text_are_stored_as_numbers(store_cfg, fake_blp, share):
+    from dl import registry, store
+    from dl.registry import ops
+
+    cfg = yaml.safe_load(store_cfg.read_text())
+    cfg.setdefault("universe_overrides", {}).setdefault("sx5e", {})["snapshot_fields"] = {
+        "pe_ratio": "PE_RATIO", "fund_currency": "EQY_FUND_CRNCY"}
+    store_cfg.write_text(yaml.safe_dump(cfg))
+    fake_blp.refdata = {"AAA FP Equity": {"CRNCY": "EUR", "PE_RATIO": "17.5", "EQY_FUND_CRNCY": "EUR"},
+                        "BBB LN Equity": {"CRNCY": "GBp", "PE_RATIO": 25.8, "EQY_FUND_CRNCY": "USD"}}
+    registry.save(ops.create("sx5e", ["AAA FP", "BBB LN"], date="2025-01-02"), None)
+    _loader(store_cfg, fake_blp).run()
+    fake_blp.refdata["AAA FP Equity"]["PE_RATIO"] = "N.A."
+    _loader(store_cfg, fake_blp).run()
+    snap = store.read_snapshot("sx5e")
+    assert snap["pe_ratio"].dtype.kind == "f" and snap.at["BBB LN", "pe_ratio"] == 25.8
+    assert pd.isna(snap.at["AAA FP", "pe_ratio"]) and snap.at["AAA FP", "fund_currency"] == "EUR"

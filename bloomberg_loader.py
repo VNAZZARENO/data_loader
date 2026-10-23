@@ -58,6 +58,9 @@ logger = logging.getLogger(__name__)
 
 
 
+# Colonnes texte de l'instantané (universe_overrides.<u>.snapshot_fields) ; les autres sont converties en nombres.
+SNAPSHOT_TEXT_FIELDS = {"fund_currency"}
+
 # Référentiel par titre : champ Bloomberg -> colonne du store (_refdata.parquet).
 REF_FIELDS = {
     "CRNCY": "currency", "NAME": "name", "GICS_SECTOR_NAME": "sector",
@@ -645,7 +648,6 @@ class ATLASBloombergLoader:
                                          benchmark[[col]].rename(columns={col: "benchmark"}),
                                          config=cfg, test=test)
             self._update_refdata()
-            self._update_snapshot()
             self._update_fx()
             # Derived layers are rewritten from the oldest raw date touched this run: a
             # catch-up of a field left behind may reach back before the run's start date.
@@ -660,6 +662,11 @@ class ATLASBloombergLoader:
             logger.error(f"Store layers update failed: {e}")
             logger.error(traceback.format_exc())
             self._manifest.error = f"store layers: {type(e).__name__}: {e}"
+        # Après les couches dérivées et hors de leur bloc : un instantané en échec ne bloque ni fx_eur ni clean.
+        try:
+            self._update_snapshot()
+        except Exception as e:
+            logger.warning(f"Snapshot update failed, previous file kept: {type(e).__name__}: {e}")
 
     def _store_raw(self, alias: str, df: pd.DataFrame) -> None:
         """A store failure must never cost the legacy xlsx its data."""
@@ -725,9 +732,12 @@ class ATLASBloombergLoader:
         df = pd.DataFrame({col: raw[f.lower()] if f.lower() in raw.columns else None for col, f in fields.items()},
                           index=raw.index)
         df.index = [str(i).replace(self.ticker_suffix, "") if self.ticker_suffix else str(i) for i in raw.index]
-        df = df.dropna(how="all")
+        df = df[~df.index.duplicated(keep="last")].dropna(how="all")
         if df.empty:
             return
+        for col in df.columns:          # xbbg peut livrer un nombre en texte : types stables d'un passage à l'autre
+            if col not in SNAPSHOT_TEXT_FIELDS:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
         df["asof"] = pd.Timestamp.today().normalize()
         store_writer.write_snapshot(self.store_universe, df, self.config, self.test)
 

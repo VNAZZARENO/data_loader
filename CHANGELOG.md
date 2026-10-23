@@ -9,6 +9,8 @@
   `BEST_PE_RATIO`, `CUR_MKT_CAP`, `TRAIL_12M_EPS` et `EQY_FUND_CRNCY`, pour un PER calculé par Bloomberg
   dans la bonne devise (le champ `EPS` du store est le BPA d'une seule période, en devise de publication).
   Un titre absent d'une réponse garde sa ligne précédente ; un échec du BDP garde le fichier existant.
+  L'instantané passe après les couches dérivées, dans son propre bloc : son échec ne bloque ni `fx_eur` ni
+  `clean`. Les nombres livrés en texte sont convertis, pour des types stables d'un passage à l'autre.
 
 ## 2026-10-22
 
