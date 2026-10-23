@@ -99,3 +99,14 @@ def write_refdata(universe: str, df: pd.DataFrame, config=None, test=False) -> N
         df = pd.concat([old[~old.index.isin(df.index)], df])
     df.index.name = "ticker"
     smbio.atomic_write_via(p, lambda tmp: df.sort_index().to_parquet(tmp))
+
+
+def write_snapshot(universe: str, df: pd.DataFrame, config=None, test=False) -> None:
+    """``df`` indexe par ticker : valeurs du jour (PER, capitalisation...) et colonne asof. Un ticker absent de
+    la nouvelle reponse garde sa ligne precedente (et son asof)."""
+    p = layout.snapshot_path(universe, config, test)
+    if p.is_file():
+        old = pd.read_parquet(p)
+        df = pd.concat([old[~old.index.isin(df.index)], df])
+    df.index.name = "ticker"
+    smbio.atomic_write_via(p, lambda tmp: df.sort_index().to_parquet(tmp))

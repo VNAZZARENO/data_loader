@@ -127,6 +127,12 @@ def read_fx(ccys=None, start=None, end=None, config=None, test=False) -> pd.Data
     return _read_dir(paths.fx_dir(config, test), start, end, ccys)
 
 
+def read_snapshot(universe: str, config=None, test=False) -> pd.DataFrame:
+    """Valeurs du jour demandées en BDP (universe_overrides.<u>.snapshot_fields), indexées par ticker, avec asof."""
+    p = layout.snapshot_path(universe, config, test)
+    return pd.read_parquet(p) if p.is_file() else pd.DataFrame()
+
+
 def read_refdata(universe: str, config=None, test=False) -> pd.DataFrame:
     p = layout.refdata_path(universe, config, test)
     if not p.is_file():

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-23
+
+### Added
+- **Instantané de valorisation** (`_snapshot.parquet`, lecteur : GetCarto, fiche titre de Carto). Un univers
+  peut déclarer `snapshot_fields` (colonne -> mnémonique) dans `universe_overrides` : ces champs sont demandés
+  en BDP à chaque passage, sans historique, une ligne par titre avec `asof`. sxxr déclare `PE_RATIO`,
+  `BEST_PE_RATIO`, `CUR_MKT_CAP`, `TRAIL_12M_EPS` et `EQY_FUND_CRNCY`, pour un PER calculé par Bloomberg
+  dans la bonne devise (le champ `EPS` du store est le BPA d'une seule période, en devise de publication).
+  Un titre absent d'une réponse garde sa ligne précédente ; un échec du BDP garde le fichier existant.
+
 ## 2026-10-22
 
 ### Added

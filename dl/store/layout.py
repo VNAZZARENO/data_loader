@@ -23,6 +23,10 @@ def refdata_path(universe: str, config=None, test=False) -> Path:
     return paths.store_dir(universe, config, test) / "_refdata.parquet"
 
 
+def snapshot_path(universe: str, config=None, test=False) -> Path:
+    return paths.store_dir(universe, config, test) / "_snapshot.parquet"
+
+
 def list_fields(universe: str, layer: str = "raw", config=None, test=False) -> list[str]:
     d = field_dir(universe, layer, "x", config, test).parent
     if not d.is_dir():

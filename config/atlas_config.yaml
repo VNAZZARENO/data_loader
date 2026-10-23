@@ -148,6 +148,15 @@ universe_overrides:
       div_yield: EQY_DVD_YLD_12M
       announcement_dt: ANNOUNCEMENT_DT
     sparse_fields: [div_yield]
+    # Valeurs du jour en BDP, sans historique (store : _snapshot.parquet ; lecteur : GetCarto, fiche titre
+    # de Carto). PE_RATIO et BEST_PE_RATIO calcules par Bloomberg dans la bonne devise ; CUR_MKT_CAP en
+    # millions de la devise de cotation ; TRAIL_12M_EPS et EQY_FUND_CRNCY en devise de publication.
+    snapshot_fields:
+      pe_ratio: PE_RATIO
+      best_pe_ratio: BEST_PE_RATIO
+      cur_mkt_cap: CUR_MKT_CAP
+      trail_12m_eps: TRAIL_12M_EPS
+      fund_currency: EQY_FUND_CRNCY
   global_macro:
     ticker_suffix: ''
     fx_layer: false   # actifs heterogenes : pas de couche fx_eur

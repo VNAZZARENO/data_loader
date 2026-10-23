@@ -645,6 +645,7 @@ class ATLASBloombergLoader:
                                          benchmark[[col]].rename(columns={col: "benchmark"}),
                                          config=cfg, test=test)
             self._update_refdata()
+            self._update_snapshot()
             self._update_fx()
             # Derived layers are rewritten from the oldest raw date touched this run: a
             # catch-up of a field left behind may reach back before the run's start date.
@@ -704,6 +705,31 @@ class ATLASBloombergLoader:
         old = ref.reindex(df.index).reindex(columns=df.columns)
         df = old.combine_first(df)      # une valeur déjà connue l'emporte sur la nouvelle réponse
         store_writer.write_refdata(self.store_universe, df, self.config, self.test)
+
+    def _update_snapshot(self) -> None:
+        """Valeurs du jour en BDP pour les champs declares dans universe_overrides.<u>.snapshot_fields
+        (colonne -> mnemonique), par exemple PER ou capitalisation. Sans historique : une ligne par titre."""
+        overrides = self.config.get("universe_overrides", {}).get(self.universe, {})
+        fields = overrides.get("snapshot_fields") or {}
+        if not fields or not self.tickers:
+            return
+        try:
+            raw = self.blp.bdp([t + self.ticker_suffix for t in self.tickers], list(fields.values()),
+                               backend="pandas", format="wide")
+        except Exception as e:
+            logger.warning(f"Snapshot (BDP) failed, previous values kept: {e}")
+            return
+        if raw is None or raw.empty:
+            return
+        raw.columns = [str(c).lower() for c in raw.columns]
+        df = pd.DataFrame({col: raw[f.lower()] if f.lower() in raw.columns else None for col, f in fields.items()},
+                          index=raw.index)
+        df.index = [str(i).replace(self.ticker_suffix, "") if self.ticker_suffix else str(i) for i in raw.index]
+        df = df.dropna(how="all")
+        if df.empty:
+            return
+        df["asof"] = pd.Timestamp.today().normalize()
+        store_writer.write_snapshot(self.store_universe, df, self.config, self.test)
 
     def _update_fx(self) -> None:
         overrides = self.config.get("universe_overrides", {}).get(self.universe, {})

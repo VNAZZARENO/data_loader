@@ -6,5 +6,5 @@ le daily ne reecrit que l'annee courante de chaque champ.
 
 from .layout import LAYERS  # noqa: F401
 from .reader import (  # noqa: F401
-    fields, first_valid, membership_mask, read, read_benchmark, read_fx, read_refdata, years,
+    fields, first_valid, membership_mask, read, read_benchmark, read_fx, read_refdata, read_snapshot, years,
 )

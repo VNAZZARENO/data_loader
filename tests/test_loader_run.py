@@ -409,3 +409,39 @@ def test_refdata_adds_gics_levels_and_countries_without_touching_known_values(st
     _loader(store_cfg, fake_blp).run()
     assert not [c for c in fake_blp.calls if c[0] == "bdp" and "GICS_SUB_INDUSTRY_NAME" in c[2]
                 and any("AAA FP" in t for t in c[1])]
+
+
+def test_quote_snapshot_written_when_universe_declares_fields(store_cfg, fake_blp, share):
+    from dl import registry, store
+    from dl.registry import ops
+
+    cfg = yaml.safe_load(store_cfg.read_text())
+    cfg.setdefault("universe_overrides", {}).setdefault("sx5e", {})["snapshot_fields"] = {
+        "pe_ratio": "PE_RATIO", "fund_currency": "EQY_FUND_CRNCY"}
+    store_cfg.write_text(yaml.safe_dump(cfg))
+    fake_blp.refdata = {"AAA FP Equity": {"CRNCY": "EUR", "PE_RATIO": 17.5, "EQY_FUND_CRNCY": "EUR"},
+                        "BBB LN Equity": {"CRNCY": "GBp", "PE_RATIO": 25.8, "EQY_FUND_CRNCY": "USD"}}
+    registry.save(ops.create("sx5e", ["AAA FP", "BBB LN"], date="2025-01-02"), None)
+    _loader(store_cfg, fake_blp).run()
+
+    snap = store.read_snapshot("sx5e")
+    assert snap.at["BBB LN", "pe_ratio"] == 25.8 and snap.at["BBB LN", "fund_currency"] == "USD"
+    assert snap.at["AAA FP", "pe_ratio"] == 17.5 and snap["asof"].notna().all()
+
+    # Second passage : valeurs du jour remplacées, titre absent de la réponse conservé
+    fake_blp.refdata["AAA FP Equity"]["PE_RATIO"] = 18.0
+    del fake_blp.refdata["BBB LN Equity"]
+    _loader(store_cfg, fake_blp).run()
+    snap = store.read_snapshot("sx5e")
+    assert snap.at["AAA FP", "pe_ratio"] == 18.0 and snap.at["BBB LN", "pe_ratio"] == 25.8
+
+
+def test_no_quote_snapshot_without_declared_fields(store_cfg, fake_blp, share):
+    from dl import registry, store
+    from dl.registry import ops
+
+    fake_blp.refdata = {"AAA FP Equity": {"CRNCY": "EUR"}}
+    registry.save(ops.create("sx5e", ["AAA FP"], date="2025-01-02"), None)
+    _loader(store_cfg, fake_blp).run()
+    assert store.read_snapshot("sx5e").empty
+    assert not [c for c in fake_blp.calls if c[0] == "bdp" and "PE_RATIO" in c[2]]
